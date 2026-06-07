@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en" data-personality="JARVIS">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>J.A.R.V.I.S.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div class="scanlines"></div>
+  <canvas id="bgCanvas"></canvas>
+
+  <!-- Settings Overlay -->
+  <div id="settings-overlay" class="settings-overlay"></div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Settings Panel -->
+  <div id="settings-panel" class="settings-panel">
+    <div class="settings-header">
+      <span class="settings-title">⚙ SYSTEM CONFIGURATION</span>
+      <button id="settings-close-btn" class="settings-close">✕</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">ACTIVE PERSONALITY</div>
+      <div class="personality-grid">
+        <button class="personality-btn active" data-personality="JARVIS">
+          <span class="p-icon">🔵</span>
+          <span class="p-name">J.A.R.V.I.S.</span>
+          <span class="p-desc">Refined · British · Loyal</span>
+        </button>
+        <button class="personality-btn" data-personality="FRIDAY">
+          <span class="p-icon">🟠</span>
+          <span class="p-name">F.R.I.D.A.Y.</span>
+          <span class="p-desc">Warm · Casual · Irish</span>
+        </button>
+        <button class="personality-btn" data-personality="ULTRON">
+          <span class="p-icon">🔴</span>
+          <span class="p-name">U.L.T.R.O.N.</span>
+          <span class="p-desc">Cold · Dark · Inevitable</span>
+        </button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">VOICE ENGINE</div>
+      <div class="settings-row">
+        <span class="settings-key">TTS Mode</span>
+        <span class="settings-val" id="tts-mode-display">Browser Speech</span>
+      </div>
+      <div class="settings-hint">ElevenLabs: set ELEVENLABS_API_KEY in .env | Otherwise uses browser/OS speech</div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">WAKE WORD</div>
+      <div class="settings-row">
+        <span class="settings-key">Auto-listen for "Hey JARVIS"</span>
+        <label class="toggle">
+          <input type="checkbox" id="wake-word-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="settings-hint">Also responds to "Hey FRIDAY" and "Ultron"</div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">SPEECH RECOGNITION</div>
+      <div class="settings-row">
+        <span class="settings-key">Auto-send after silence</span>
+        <label class="toggle">
+          <input type="checkbox" id="auto-send-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="settings-hint">Waits for you to finish speaking before sending</div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">CONVERSATION EXPORT</div>
+      <div class="settings-row export-row">
+        <button id="export-txt-btn" class="export-btn">📄 Export .TXT</button>
+        <button id="export-json-btn" class="export-btn">📦 Export .JSON</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">AI MODEL</div>
+      <div class="settings-row">
+        <span class="settings-key">Ollama Status</span>
+        <span class="settings-val" id="ollama-status-display">Checking...</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-key">Session ID</span>
+        <span class="settings-val" id="session-id-display">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main HUD -->
+  <div class="hud">
+
+    <!-- TOP BAR -->
+    <header class="hud-header">
+      <div class="header-left">
+        <span class="sys-label">STARK INDUSTRIES</span>
+        <span class="sys-sub">INTEGRATED DEFENSE SYSTEMS</span>
+      </div>
+      <div class="header-center">
+        <div class="logo-text">J.A.R.V.I.S.</div>
+        <div class="logo-sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+      </div>
+      <div class="header-right">
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙</button>
+        <div class="status-dots">
+          <div class="dot dot-green" id="dot-ws" title="WebSocket"></div>
+          <div class="dot dot-blue" id="dot-ai" title="AI"></div>
+          <div class="dot dot-amber" id="dot-voice" title="Voice"></div>
+        </div>
+        <div id="clock" class="clock">00:00:00</div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="hud-main">
+
+      <!-- LEFT PANEL -->
+      <aside class="panel panel-left">
+        <div class="panel-title">SYSTEM STATUS</div>
+        <div class="stat-list">
+          <div class="stat-item">
+            <span class="stat-label">WEBSOCKET</span>
+            <div class="stat-bar"><div class="stat-fill" id="stat-ws" style="--pct:0%"></div></div>
+            <span class="stat-val" id="stat-ws-val">OFFLINE</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">AI CORE</span>
+            <div class="stat-bar"><div class="stat-fill" id="stat-ai" style="--pct:0%"></div></div>
+            <span class="stat-val" id="stat-ai-val">STANDBY</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">VOICE ENGINE</span>
+            <div class="stat-bar"><div class="stat-fill" id="stat-voice" style="--pct:100%"></div></div>
+            <span class="stat-val" id="stat-voice-val">READY</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">WAKE WORD</span>
+            <div class="stat-bar"><div class="stat-fill" style="--pct:100%"></div></div>
+            <span class="stat-val" id="wake-word-stat">ON</span>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">ACTIVE MODE</div>
+        <div class="personality-badge" id="personality-badge">
+          <span class="p-badge-dot"></span>
+          <span id="active-personality-name">J.A.R.V.I.S.</span>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">QUICK SWITCH</div>
+        <div class="mode-switcher">
+          <button class="mode-btn active" data-personality="JARVIS">JARVIS</button>
+          <button class="mode-btn" data-personality="FRIDAY">FRIDAY</button>
+          <button class="mode-btn" data-personality="ULTRON">ULTRON</button>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">COMMAND LOG</div>
+        <div class="cmd-log" id="cmd-log">
+          <div class="log-item init">» System initialized v3.0</div>
+        </div>
+      </aside>
+
+      <!-- CENTER -->
+      <section class="panel panel-center">
+        <div class="arc-container">
+          <canvas id="arcCanvas" width="300" height="300"></canvas>
+          <div class="arc-inner">
+            <div class="arc-status" id="arc-status">STANDBY</div>
+            <div class="arc-hint" id="arc-hint">HOLD SPACE OR CLICK MIC</div>
+          </div>
+        </div>
+
+        <div class="chat-container" id="chat-container">
+          <div class="chat-message jarvis-msg">
+            <span class="chat-sender" id="initial-sender">JARVIS</span>
+            <p id="initial-greeting">Initializing systems...</p>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <button id="mic-btn" class="mic-btn" title="Hold to speak (or hold SPACE)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z"/>
+              <path d="M19 10a7 7 0 01-14 0M12 19v3M8 22h8"/>
+            </svg>
+          </button>
+          <input type="text" id="text-input" class="text-input" placeholder="Type a command..." autocomplete="off" />
+          <button id="send-btn" class="send-btn">SEND</button>
+        </div>
+        <div class="voice-hint">
+          Say <span class="wake-word-highlight">"Hey JARVIS"</span> · Hold <kbd>SPACE</kbd> to speak · <kbd>Enter</kbd> to type
+        </div>
+      </section>
+
+      <!-- RIGHT PANEL -->
+      <aside class="panel panel-right">
+        <div class="panel-title">QUICK COMMANDS</div>
+        <div class="quick-grid">
+          <button class="quick-btn" data-cmd="Take a screenshot">📸 Screenshot</button>
+          <button class="quick-btn" data-cmd="What is the battery status">🔋 Battery</button>
+          <button class="quick-btn" data-cmd="Open Spotify">🎵 Spotify</button>
+          <button class="quick-btn" data-cmd="Open Google Chrome">🌐 Chrome</button>
+          <button class="quick-btn" data-cmd="Volume up">🔊 Vol Up</button>
+          <button class="quick-btn" data-cmd="Mute the audio">🔇 Mute</button>
+          <button class="quick-btn" data-cmd="What's on my calendar today">📅 Calendar</button>
+          <button class="quick-btn" data-cmd="What's in my clipboard">📋 Clipboard</button>
+          <button class="quick-btn" data-cmd="Search the web for latest AI news">🔍 AI News</button>
+          <button class="quick-btn" data-cmd="Lock the screen">🔒 Lock</button>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">LAST ACTION</div>
+        <div class="action-display">
+          <span class="action-icon">⚡</span>
+          <span class="action-text" id="action-text">Awaiting instruction</span>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">AUDIO FEED</div>
+        <canvas id="waveCanvas" width="220" height="50"></canvas>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-title">ENCRYPTION</div>
+        <div class="encrypt-display">
+          AES-256 ████████████████<br/>CHANNEL SECURED
+        </div>
+      </aside>
+
+    </main>
+
+    <footer class="hud-footer">
+      <div class="footer-item">LAT: 40.4093° N</div>
+      <div class="footer-item" id="footer-status">STATUS: CONNECTING</div>
+      <div class="footer-item">LON: 49.8671° E</div>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
