@@ -5,7 +5,7 @@
 A fully local Iron Man AI assistant with wake-word detection, streaming AI responses, voice output, and complete Mac control via keyboard, mouse, and AppleScript. Runs entirely on your machine — no cloud required.
 
 <p align="center">
-  <img src="https://files.catbox.moe/nfvte7.png" alt="JARVIS Interface Demo" width="80%">
+  <img src="demo.png" alt="JARVIS Interface Demo" width="80%">
 </p>
 
 <p align="center">
