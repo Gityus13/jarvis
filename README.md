@@ -329,8 +329,8 @@ JARVIS runs on `localhost` only. **Never expose port 3000 to the internet** — 
 *Built by [Gityus13](https://github.com/Gityus13) · Powered by Ollama · Iron Man aesthetic*
 
 <div align="center">
-  <pre style="font-family: monospace; white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; background: transparent; border: none; padding: 10px; font-size: clamp(6px, 2vw, 12px); line-height: 1.2;">
-<span style="color: #00d4ff;">
+  
+```text
 ██████╗ ██╗████████╗██╗   ██╗██╗   ██╗███████╗     ██╗██████╗ 
 ██╔════╝ ██║╚══██╔══╝╚██╗ ██╔╝██║   ██║██╔════╝    ███║╚════██╗
 ██║  ███╗██║   ██║    ╚████╔╝ ██║   ██║███████╗    ╚██║ █████╔╝
@@ -345,6 +345,3 @@ JARVIS runs on `localhost` only. **Never expose port 3000 to the internet** — 
 ██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║
 ╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║
  ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝
-</span>
-  </pre>
-</div>
