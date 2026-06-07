@@ -67,8 +67,8 @@ A fully local Iron Man AI assistant with wake-word detection, streaming AI respo
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/Gityus13/jarvis-ai.git
-cd jarvis-ai
+git clone https://github.com/Gityus13/jarvis.git
+cd jarvis
 npm install
 ```
 
@@ -84,7 +84,7 @@ cp .env.example .env
 Edit `.env` — at minimum set your Ollama model:
 
 ```env
-OLLAMA_MODEL=llama3.2
+OLLAMA_MODEL=gpt-oss:120b-cloud
 ```
 
 ### 3. Start Ollama
@@ -92,7 +92,7 @@ OLLAMA_MODEL=llama3.2
 ```bash
 # In a separate terminal:
 ollama serve
-ollama pull llama3.2
+ollama pull gpt-oss:120b-cloud
 ```
 
 ### 4. Start JARVIS
