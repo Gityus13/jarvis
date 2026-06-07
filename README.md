@@ -4,10 +4,30 @@
 
 A fully local Iron Man AI assistant with wake-word detection, streaming AI responses, voice output, and complete Mac control via keyboard, mouse, and AppleScript. Runs entirely on your machine — no cloud required.
 
-![JARVIS HUD](https://img.shields.io/badge/JARVIS-v3.0-00d4ff?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJhMTAgMTAgMCAxIDAgMCAyMCAxMCAxMCAwIDAgMCAwLTIweiIvPjwvc3ZnPg==)
-[![Node](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
-[![Ollama](https://img.shields.io/badge/Ollama-local-blue)](https://ollama.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+<p align="center">
+  <img src="https://your-image-url.jpg" alt="JARVIS Interface Demo" width="80%">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-3.0-blue?style=for-the-badge">
+  <img src="https://img.shields.io/badge/status-active-success?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Node.js-18%2B-green?style=for-the-badge&logo=nodedotjs">
+  <img src="https://img.shields.io/badge/Ollama-local-blue?style=for-the-badge">
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey?style=for-the-badge&logo=apple">
+  <br>
+  <img src="https://img.shields.io/badge/Mac%20Control-Full-red?style=for-the-badge">
+  <img src="https://img.shields.io/badge/wake--word-Hey%20JARVIS-ff69b4?style=for-the-badge">
+  <img src="https://img.shields.io/badge/TTS-ElevenLabs%20%7C%20macOS-9cf?style=for-the-badge">
+  <img src="https://img.shields.io/badge/WebSocket-✅-blue?style=for-the-badge">
+  <img src="https://img.shields.io/badge/RAG-enabled-green?style=for-the-badge">
+  <br>
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge">
+  <img src="https://img.shields.io/github/stars/Gityus13/jarvis?style=for-the-badge&logo=github">
+  <img src="https://img.shields.io/github/forks/Gityus13/jarvis?style=for-the-badge&logo=github">
+  <img src="https://img.shields.io/github/issues/Gityus13/jarvis?style=for-the-badge&logo=github">
+  <img src="https://img.shields.io/github/repo-size/Gityus13/jarvis?style=for-the-badge">
+  <img src="https://img.shields.io/github/last-commit/Gityus13/jarvis?style=for-the-badge">
+</p>
 
 ---
 
