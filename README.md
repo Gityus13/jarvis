@@ -44,7 +44,7 @@ A fully local Iron Man AI assistant with wake-word detection, streaming AI respo
 - **Always listening** — passive wake word detection runs in background
 - **Browser TTS** — speaks every response (summarizes long answers)
 - **ElevenLabs support** — premium realistic voice (optional API key)
-- **macOS say fallback** — Daniel/Moira/Alex voices per personality
+- **System voice fallback** — Daniel/Moira/Alex voices per personality (via your browser)
 
 ### Mac Control (real OS-level)
 - **Keyboard** — type text, press any key combo (Cmd+C, Cmd+Tab, etc.)
@@ -178,7 +178,19 @@ Allow microphone when Chrome asks.
 
 ## Voice Setup
 
-**macOS (built-in, free):**
+**Kokoro (free, local, natural — recommended):**
+```bash
+npm install          # kokoro-js is an optional dependency, installs automatically
+npm start            # first run downloads the ~90MB voice model, then it's cached
+```
+Settings → Voice Engine shows `Kokoro ✓` when it's active. If Kokoro isn't installed,
+is still loading, or fails for any reason, J.A.R.V.I.S. automatically uses the normal
+browser voice instead — nothing breaks. Pick voices in `.env` (`KOKORO_VOICE_JARVIS=bm_george`,
+...) or turn it off with `KOKORO=off`.
+
+Voice order: **Kokoro → ElevenLabs → your system voice** (the first one that works is used).
+
+**System voices (built-in, free):**
 ```bash
 # List available voices:
 say -v '?'
@@ -192,6 +204,12 @@ ULTRON_VOICE=Alex
 1. Get a free API key at [elevenlabs.io](https://elevenlabs.io)
 2. Add to `.env`: `ELEVENLABS_API_KEY=your_key_here`
 3. Restart
+
+**Mic not hearing you?**
+- Use **Chrome**, open `http://localhost:3000` (the mic needs localhost or https), allow the microphone.
+- The top of the HUD shows `HEARD: "…"` while it listens for the wake word — if that text never changes, the mic isn't reaching Chrome.
+- Chrome's speech recognition needs internet (it uses Google's service).
+- Hold **SPACE** or the mic button to talk without the wake word.
 
 ---
 
@@ -295,7 +313,8 @@ jarvis/
 │   ├── ollama.js          # Streaming Ollama client
 │   ├── personalities.js   # JARVIS / FRIDAY / ULTRON prompts
 │   ├── mac-control.js     # Full Mac automation + robotjs
-│   ├── tts.js             # ElevenLabs + macOS say TTS
+│   ├── tts.js             # ElevenLabs synthesis
+│   ├── kokoro.js          # Optional local Kokoro TTS
 │   ├── command-router.js  # Fast command pre-processing
 │   ├── memory.js          # Conversation persistence
 │   ├── logger.js          # Logging
@@ -316,13 +335,14 @@ jarvis/
 - [ElevenLabs](https://elevenlabs.io) — Premium TTS (optional)
 - [Express](https://expressjs.com) + [ws](https://github.com/websockets/ws) — Server
 - [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) — Voice recognition
-- macOS `say` + AppleScript + `osascript` — Mac automation
+- [Kokoro](https://github.com/hexgrad/kokoro) — Free local TTS (optional)
+- AppleScript + `osascript` — Mac automation
 
 ---
 
 ## Security
 
-JARVIS runs on `localhost` only. **Never expose port 3000 to the internet** — it has full keyboard, mouse, and Mac control.
+JARVIS only accepts connections from your own computer (`127.0.0.1`), and the server rejects WebSocket/API requests whose `Origin`/`Host` isn't localhost — so a random website you visit can't drive your Mac through it. **Never expose port 3000 to the internet** — it has full keyboard, mouse, and Mac control. To use it from another device on your LAN, set `HOST=0.0.0.0` and `ALLOWED_HOSTS=<your-ip>` in `.env`.
 
 ---
 

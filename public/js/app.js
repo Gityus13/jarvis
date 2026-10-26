@@ -19,8 +19,30 @@
     listening: false,
     phase: "idle", // idle | wakeword | command | manual
     wakeWordEnabled: true,
+    autoSend: true,
+    micBlocked: false,
+    voiceNames: null,
     reconnectDelay: 1000,
   };
+
+  // Remembered settings
+  function loadPref(k, def) { try { var v = localStorage.getItem("jarvis_" + k); return v === null ? def : v === "1"; } catch (e) { return def; } }
+  function savePref(k, v)   { try { localStorage.setItem("jarvis_" + k, v ? "1" : "0"); } catch (e) {} }
+  S.wakeWordEnabled = loadPref("wake", true);
+  S.autoSend        = loadPref("autosend", true);
+
+  // Stable id → the server keeps your memory across reloads/reconnects
+  function clientId() {
+    try {
+      var id = localStorage.getItem("jarvis_cid");
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+           : "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+        localStorage.setItem("jarvis_cid", id);
+      }
+      return id;
+    } catch (e) { return "anon" + Math.random().toString(36).slice(2, 14); }
+  }
 
   // ── DOM refs ─────────────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -52,7 +74,7 @@
 
   function connectWS() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    try { S.ws = new WebSocket(proto + "//" + location.host); }
+    try { S.ws = new WebSocket(proto + "//" + location.host + "/?cid=" + encodeURIComponent(clientId())); }
     catch { scheduleRecon(); return; }
 
     S.ws.onopen = function () {
@@ -69,6 +91,10 @@
     S.ws.onclose = function () {
       S.connected = false;
       S.thinking = false;
+      S.streaming = false;          // otherwise the mic stays dead after a dropped connection
+      S.streamEl = null; S.streamBuf = "";
+      rmEl("thinking-msg");
+      if (S.phase === "command" || S.phase === "manual" || S.phase === "activating") { stopAllRec(); S.phase = "idle"; setListening(false); }
       setStat("ws", 0, "OFFLINE");
       setStat("ai", 0, "OFFLINE");
       setDot("ws", false);
@@ -85,12 +111,18 @@
       onMsg(m);
     };
 
-    setInterval(function () {
-      if (S.ws && S.ws.readyState === WebSocket.OPEN) {
-        S.ws.send(JSON.stringify({ type: "ping" }));
-      }
-    }, 20000);
   }
+
+  // one keep-alive timer (it used to add another one on every reconnect)
+  setInterval(function () {
+    if (S.ws && S.ws.readyState === WebSocket.OPEN) S.ws.send(JSON.stringify({ type: "ping" }));
+  }, 20000);
+
+  // Safety net: if the mic ever ends up idle for no reason, bring wake-word listening back
+  setInterval(function () {
+    if (S.wakeWordEnabled && S.connected && !S.micBlocked && S.phase === "idle" &&
+        !S.thinking && !S.streaming && !speaking) scheduleWakeWord(100);
+  }, 4000);
 
   function scheduleRecon() {
     clearTimeout(_reconTimer);
@@ -125,6 +157,7 @@
           ttsSpeak(m.message);
         }
         fetchStatus();
+        if (S.wakeWordEnabled) scheduleWakeWord(1200);
         break;
 
       case "pong": break;
@@ -152,7 +185,11 @@
         if (S.streamEl) {
           S.streamBuf += (m.text || "");
           var el = S.streamEl.querySelector(".msg-text");
-          if (el) { el.textContent += (m.text || ""); scrollChat(); }
+          // hide the {"action":…} JSON while it streams (even a half-finished one)
+          if (el) {
+            el.textContent = S.streamBuf.replace(/\{[^{}]{0,400}\}/g, "").replace(/\{[^}]*$/, "").replace(/```(?:json)?/g, "").trimStart();
+            scrollChat();
+          }
         }
         break;
 
@@ -164,10 +201,12 @@
           if (el2) {
             var cleaned = S.streamBuf
               .replace(/\{[^{}]{0,400}\}/g, "")
+              .replace(/\{[^}]*$/, "")
+              .replace(/```(?:json)?/g, "")
               .replace(/\s{2,}/g, " ")
               .trim();
-            el2.textContent = cleaned || "…";
-            if (cleaned) ttsSpeak(cleaned);
+            if (cleaned) { el2.textContent = cleaned; ttsSpeak(cleaned, true); }
+            else if (S.streamEl.parentNode) S.streamEl.parentNode.removeChild(S.streamEl);   // no empty "…" bubble
           }
           S.streamEl = null;
         }
@@ -181,7 +220,7 @@
         break;
 
       case "jarvis_response":
-        if (m.text) { addMsg("jarvis", m.text); ttsSpeak(m.text); }
+        if (m.text) { addMsg("jarvis", m.text); ttsSpeak(m.text, true); }
         if (S.wakeWordEnabled && S.phase !== "manual") {
           setTimeout(function () { scheduleWakeWord(600); }, 300);
         }
@@ -219,39 +258,84 @@
 
       case "error":
         toast(m.message || "Unknown error", "error");
+        setThinking(false);
+        if (S.wakeWordEnabled && S.phase !== "manual") scheduleWakeWord(600);
         break;
     }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // BROWSER TTS — summarizes long text, picks personality voice
+  // TTS — Kokoro / ElevenLabs (from the server) → otherwise the normal browser voice
+  //
+  // The mic is NEVER opened while Jarvis is talking (it used to transcribe its own
+  // "Yes, sir?" as your command). Anything that wants the mic calls whenQuiet().
   // ════════════════════════════════════════════════════════════════════════════
   var SYN = window.speechSynthesis;
   var voices = [];
+  var serverTTSOff = false;           // server said "nothing available" → stop asking, use browser voice
+  var kAudio = null, kCtrl = null, kReq = 0;
+  var speaking = false;
+  var speechQ = [];                   // queued lines (e.g. an action result after the AI's sentence)
+  var speechWaiters = [];             // callbacks waiting for silence
+  var quietTimer = null, speakGuard = null;
 
-  function loadVoices() {
-    if (SYN) voices = SYN.getVoices();
-  }
+  function loadVoices() { if (SYN) voices = SYN.getVoices(); }
   loadVoices();
   if (SYN) SYN.onvoiceschanged = loadVoices;
 
-  function ttsSpeak(text) {
-    if (!SYN || !text) return;
+  // ── Silence tracking ─────────────────────────────────────────────────────────
+  function whenQuiet(fn) {
+    if (speechWaiters.indexOf(fn) < 0) speechWaiters.push(fn);
+    pumpWaiters();
+  }
+  function pumpWaiters() {
+    clearTimeout(quietTimer);
+    if (speaking) return;
+    // small tail so the speaker's last sound doesn't leak into the mic
+    quietTimer = setTimeout(function () {
+      if (speaking) return;
+      var w = speechWaiters.splice(0);
+      for (var i = 0; i < w.length; i++) { try { w[i](); } catch (e) { console.warn(e); } }
+    }, 350);
+  }
 
-    var clean = text
+  function finishSpeech(id) {
+    if (id !== kReq) return;          // a newer line already took over
+    clearTimeout(speakGuard);
+    kAudio = null;
+    speaking = false;
+    if (speechQ.length) { playSpeech(speechQ.shift()); return; }
+    pumpWaiters();
+  }
+
+  // Stops everything that's speaking (Kokoro audio, in-flight request, browser voice, queue)
+  function stopSpeech() {
+    kReq++;                           // invalidate pending requests/callbacks
+    clearTimeout(speakGuard);
+    speechQ = [];
+    if (kCtrl)  { try { kCtrl.abort(); } catch (e) {} kCtrl = null; }
+    if (kAudio) { try { kAudio.pause(); } catch (e) {} kAudio = null; }
+    if (SYN) SYN.cancel();
+    speaking = false;
+    pumpWaiters();
+  }
+
+  function speechText(text) {
+    var clean = String(text || "")
       .replace(/\{[^{}]{0,400}\}/g, "")
+      .replace(/```[\s\S]*?```/g, "")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
       .replace(/`[^`]*`/g, "")
       .replace(/#{1,6}\s/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       .replace(/https?:\/\/\S+/g, "link")
       .replace(/\n+/g, " ")
       .replace(/\.{2,}/g, ".")
       .trim();
+    if (!clean) return "";
 
-    if (!clean) return;
-
-    // Summarize if too long: first 2 sentences, max 200 chars
+    // Summarize if too long: whole sentences, max 200 chars
     if (clean.length > 200) {
       var sents = clean.match(/[^.!?]+[.!?]+/g) || [];
       var summ = "";
@@ -261,174 +345,304 @@
       }
       clean = summ.trim() || clean.slice(0, 200);
     }
+    return clean;
+  }
 
-    SYN.cancel();
+  // queue=true → wait for whatever is speaking now (used for action results)
+  function ttsSpeak(text, queue) {
+    var clean = speechText(text);
+    if (!clean) return;
+    if (queue && speaking) { speechQ.push(clean); return; }
+    stopSpeech();
+    playSpeech(clean);
+  }
+
+  function playSpeech(clean) {
+    speaking = true;
+    // never leave the wake-word mic open while Jarvis talks (it would hear itself)
+    if (S.phase === "wakeword") { stopAllRec(); S.phase = "idle"; }
+    var id = ++kReq;
+    if (serverTTSOff || !window.fetch || !window.AbortController) { speakBrowser(clean, id); return; }
+    speakServer(clean, id);
+  }
+
+  // Ask the server for Kokoro/ElevenLabs audio. ANY problem (not installed, still loading,
+  // error, timeout, autoplay blocked) → fall back to the normal browser voice.
+  function speakServer(clean, id) {
+    var ctrl = kCtrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 20000);
+
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: clean, personality: S.personality }),
+      signal: ctrl.signal
+    })
+      .then(function (r) {
+        if (r.status === 501) serverTTSOff = true;    // permanently unavailable on this server
+        if (!r.ok) throw new Error("tts " + r.status);
+        return r.blob();
+      })
+      .then(function (blob) {
+        clearTimeout(timer);
+        if (id !== kReq) return;                      // a newer message took over
+        var url = URL.createObjectURL(blob);
+        var a = kAudio = new Audio(url);
+        var done = function () { URL.revokeObjectURL(url); finishSpeech(id); };
+        a.onended = done;
+        a.onerror = function () { URL.revokeObjectURL(url); if (id === kReq) speakBrowser(clean, id); };
+        clearTimeout(speakGuard);
+        speakGuard = setTimeout(done, 60000);         // never get stuck "speaking"
+        return a.play();
+      })
+      .catch(function () {
+        clearTimeout(timer);
+        if (id === kReq) speakBrowser(clean, id);     // still the latest request → normal voice
+      });
+  }
+
+  function pickVoice(p) {
+    if (!voices.length) return null;
+    var pref = (S.voiceNames && S.voiceNames[p] || "").toLowerCase();
+    var v = null;
+    if (pref) v = voices.find(function (x) { return x.name.toLowerCase().indexOf(pref) !== -1 && x.lang.indexOf("en") === 0; });
+    if (v) return v;
+    if (p === "JARVIS") {
+      return voices.find(function (x) { return /daniel/i.test(x.name) && x.lang.indexOf("en") === 0; })
+          || voices.find(function (x) { return /uk.*male|google uk.*male/i.test(x.name); })
+          || voices.find(function (x) { return x.lang === "en-GB"; })
+          || voices.find(function (x) { return x.lang.indexOf("en") === 0; });
+    }
+    if (p === "FRIDAY") {
+      return voices.find(function (x) { return /moira|karen|samantha|fiona/i.test(x.name); })
+          || voices.find(function (x) { return x.lang.indexOf("en") === 0; });
+    }
+    return voices.find(function (x) { return /alex|fred|ralph/i.test(x.name); })
+        || voices.find(function (x) { return x.lang === "en-US"; })
+        || voices.find(function (x) { return x.lang.indexOf("en") === 0; });
+  }
+
+  function speakBrowser(clean, id) {
+    if (!SYN || !clean) { finishSpeech(id); return; }
     if (voices.length === 0) loadVoices();
-
-    var utt = new SpeechSynthesisUtterance(clean);
     var p = S.personality;
+    var utt = new SpeechSynthesisUtterance(clean);
     utt.rate   = p === "ULTRON" ? 0.85 : p === "FRIDAY" ? 1.05 : 0.93;
     utt.pitch  = p === "ULTRON" ? 0.6  : p === "FRIDAY" ? 1.1  : 1.0;
     utt.volume = 1;
+    var v = pickVoice(p);
+    if (v) { utt.voice = v; utt.lang = v.lang; }
 
-    if (voices.length > 0) {
-      var v = null;
-      if (p === "JARVIS") {
-        v = voices.find(function (x) { return /daniel/i.test(x.name) && x.lang.startsWith("en"); })
-         || voices.find(function (x) { return /uk.*male|google uk.*male/i.test(x.name); })
-         || voices.find(function (x) { return x.lang === "en-GB"; })
-         || voices.find(function (x) { return x.lang.startsWith("en"); });
-      } else if (p === "FRIDAY") {
-        v = voices.find(function (x) { return /moira|karen|samantha|fiona/i.test(x.name); })
-         || voices.find(function (x) { return x.lang.startsWith("en"); });
-      } else {
-        v = voices.find(function (x) { return /alex|fred|ralph/i.test(x.name); })
-         || voices.find(function (x) { return x.lang === "en-US"; })
-         || voices.find(function (x) { return x.lang.startsWith("en"); });
-      }
-      if (v) utt.voice = v;
-    }
+    var done = function () { finishSpeech(id); };
+    utt.onend = done;
+    utt.onerror = done;
+    // Chrome sometimes never fires onend — don't let that freeze the mic forever
+    clearTimeout(speakGuard);
+    speakGuard = setTimeout(done, Math.min(30000, 3000 + clean.length * 110));
     SYN.speak(utt);
   }
 
   // ════════════════════════════════════════════════════════════════════════════
   // SPEECH RECOGNITION — TWO-PHASE SYSTEM
   //
-  // Phase 1 (wakeword): Low-profile, single-utterance recognition
-  //   Detects "Hey JARVIS", "Hey FRIDAY", "Ultron" etc.
-  //   On detection → plays ack tone → starts Phase 2
+  // Phase 1 (wakeword): continuous listening for "Hey JARVIS" / "Hey FRIDAY" / "Ultron".
+  //   Fuzzy matching (it hears "Travis", "jar vis", "Jervis"…) and it also catches a command
+  //   said in the SAME breath: "Jarvis open Spotify" runs immediately.
+  // Phase 2 (command): after the wake word, listens for your command, sends on silence.
+  // Manual: hold the mic button / SPACE → speak → release (waits for the last words).
   //
-  // Phase 2 (command): Continuous recognition with silence detection
-  //   Listens for your full command
-  //   2s silence → sends command → returns to Phase 1
-  //
-  // Manual (hold): Bypasses Phase 1 entirely
-  //   Hold mic/space → speak → release → sends immediately
+  // The mic stays CLOSED while Jarvis is speaking, so it can't hear itself.
   // ════════════════════════════════════════════════════════════════════════════
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var SR_LANG = "en-US";
 
-  // Phase 1 state
-  var wakeRec   = null;
-  var _wakeTimer = null;
+  var gen = 0;                        // bumps whenever recognizers are replaced → stale events are ignored
+  var wakeRec = null, cmdRec = null, manRec = null;
+  var _wakeTimer = null, _silTimer = null, _idleTimer = null, _settleTimer = null, _manTimer = null;
+  var cmdFinal = "", cmdInterim = "";
+  var manFinal = "", manInterim = "", manStopping = false;
+  var netFails = 0;
 
-  // Phase 2 state
-  var cmdRec    = null;
-  var cmdFinal  = "";
-  var cmdInterim = "";
-  var _silTimer  = null;
-
-  // Manual state
-  var manRec    = null;
-  var manFinal  = "";
-  var manInterim = "";
-
-  var WAKE_WORDS = {
-    JARVIS: ["hey jarvis", "jarvis"],
-    FRIDAY: ["hey friday", "friday"],
-    ULTRON: ["ultron", "hey ultron"],
+  var WAKE = {
+    JARVIS: { name: "jarvis", anywhere: true  },
+    FRIDAY: { name: "friday", anywhere: false },   // "friday" is a normal word → only at the start or after "hey"
+    ULTRON: { name: "ultron", anywhere: true  },
   };
+  var PREFIX = { hey: 1, hi: 1, ok: 1, okay: 1, yo: 1, hello: 1, hay: 1, hei: 1, a: 1 };
+  var ACKS = { JARVIS: "Yes, sir?", FRIDAY: "Yeah, boss?", ULTRON: "State your purpose." };
+
+  function lev(a, b) {
+    var m = a.length, n = b.length, i, j;
+    if (!m) return n; if (!n) return m;
+    var prev = [], cur = [];
+    for (j = 0; j <= n; j++) prev[j] = j;
+    for (i = 1; i <= m; i++) {
+      cur[0] = i;
+      for (j = 1; j <= n; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+      }
+      var t = prev; prev = cur; cur = t;
+    }
+    return prev[n];
+  }
+
+  // → { personality, end } (end = index in text just after the wake word) or null
+  function findWake(text) {
+    var re = /[A-Za-z0-9']+/g, toks = [], m;
+    while ((m = re.exec(text))) toks.push({ w: m[0].toLowerCase().replace(/'/g, ""), end: m.index + m[0].length });
+    var keys = Object.keys(WAKE);
+    keys.sort(function (a, b) { return (b === S.personality) - (a === S.personality); });   // current personality first
+
+    for (var t = 0; t < toks.length; t++) {
+      var prefixed = t > 0 && PREFIX[toks[t - 1].w] === 1;
+      var cands = [{ w: toks[t].w, end: toks[t].end }];
+      if (t + 1 < toks.length) cands.push({ w: toks[t].w + toks[t + 1].w, end: toks[t + 1].end });   // "jar vis"
+      for (var k = 0; k < keys.length; k++) {
+        var W = WAKE[keys[k]];
+        if (!(W.anywhere || prefixed || t === 0)) continue;
+        for (var c = 0; c < cands.length; c++) {
+          if (cands[c].w.length < 4) continue;
+          var maxD = prefixed ? 2 : 1;               // "hey travis" is fine, bare "travis" isn't
+          if (lev(cands[c].w, W.name) <= maxD) return { personality: keys[k], end: cands[c].end };
+        }
+      }
+    }
+    return null;
+  }
+
+  function newRec(continuous, alts) {
+    var r = new SR();
+    r.lang = SR_LANG;
+    r.continuous = continuous;
+    r.interimResults = true;
+    r.maxAlternatives = alts || 1;
+    return r;
+  }
+
+  function hint(t) { if (D.arcHint) D.arcHint.textContent = t; }
+
+  function micProblem(ev) {
+    var e = ev && ev.error;
+    if (e === "not-allowed" || e === "service-not-allowed") {
+      S.micBlocked = true;
+      toast("Microphone blocked — click the 🔒 in the address bar and allow the mic, then reload", "error");
+      setStat("voice", 0, "BLOCKED"); setListening(false); S.phase = "idle"; hint("MIC BLOCKED");
+      return true;
+    }
+    if (e === "audio-capture") {
+      S.micBlocked = true;
+      toast("No microphone found", "error");
+      setStat("voice", 0, "NO MIC"); setListening(false); S.phase = "idle"; hint("NO MIC FOUND");
+      return true;
+    }
+    if (e === "network") {
+      netFails++;
+      if (netFails === 1 || netFails % 6 === 0) toast("Speech recognition needs internet (Chrome sends audio to Google)", "warning");
+    }
+    return false;
+  }
 
   // ── Phase 1: Wake word ───────────────────────────────────────────────────────
   function scheduleWakeWord(delay) {
-    if (!SR || !S.wakeWordEnabled || !S.connected) return;
-    if (S.phase === "command" || S.phase === "manual") return;
+    if (!SR || !S.wakeWordEnabled || !S.connected || S.micBlocked) return;
+    if (S.phase === "command" || S.phase === "manual" || S.phase === "activating") return;
     clearTimeout(_wakeTimer);
-    _wakeTimer = setTimeout(startWakePhase, delay || 350);
+    var backoff = netFails > 2 ? Math.min(1000 * netFails, 8000) : 0;
+    _wakeTimer = setTimeout(function () { whenQuiet(startWakePhase); }, (delay || 300) + backoff);
   }
 
   function startWakePhase() {
-    if (!SR || !S.wakeWordEnabled || !S.connected) return;
-    if (S.phase === "command" || S.phase === "manual") return;
+    if (!SR || !S.wakeWordEnabled || !S.connected || S.micBlocked) return;
+    if (S.phase === "command" || S.phase === "manual" || S.phase === "activating") return;
+    if (S.thinking || S.streaming) { scheduleWakeWord(800); return; }
 
     stopAllRec();
     S.phase = "wakeword";
     setArc("STANDBY");
-    if (D.arcHint) D.arcHint.textContent = 'SAY: "HEY JARVIS"';
+    hint('SAY: "HEY ' + S.personality + '"');
     setStat("voice", 60, "WAKE WORD");
     setDot("vo", true);
 
-    wakeRec = new SR();
-    wakeRec.continuous     = false;
-    wakeRec.interimResults = false;
-    wakeRec.lang           = "en-US";
-    wakeRec.maxAlternatives = 3;
+    var g = gen, handled = false, pending = null;
+    var rec = wakeRec = newRec(true, 5);
 
-    wakeRec.onresult = function (ev) {
-      // Check all alternatives for wake word
-      for (var i = 0; i < ev.results.length; i++) {
-        for (var j = 0; j < ev.results[i].length; j++) {
-          var heard = ev.results[i][j].transcript.toLowerCase().trim();
-          for (var personality in WAKE_WORDS) {
-            var words = WAKE_WORDS[personality];
-            for (var k = 0; k < words.length; k++) {
-              if (heard === words[k] || heard.indexOf(words[k]) !== -1) {
-                wakeDetected(personality);
-                return;
-              }
-            }
-          }
-        }
-      }
-    };
-
-    wakeRec.onerror = function (ev) {
-      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
-        toast("Microphone blocked — allow mic in Chrome settings", "error");
-        setStat("voice", 0, "BLOCKED");
-        setListening(false);
-        return;
-      }
-      // no-speech / aborted / network → just restart
-      if (S.phase === "wakeword") scheduleWakeWord(400);
-    };
-
-    wakeRec.onend = function () {
-      if (S.phase === "wakeword") scheduleWakeWord(200);
-    };
-
-    try { wakeRec.start(); }
-    catch (e) {
-      setTimeout(function () { try { if (wakeRec) wakeRec.start(); } catch (e2) {} }, 500);
+    function fire() {
+      if (handled || g !== gen || !pending) return;
+      handled = true;
+      wakeDetected(pending.p, pending.rest);
     }
+
+    rec.onresult = function (ev) {
+      if (g !== gen || handled) return;
+      netFails = 0;
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var res = ev.results[i], hit = null;
+        for (var j = 0; j < res.length && !hit; j++) {          // check every alternative
+          var h = findWake(res[j].transcript);
+          if (h) hit = { p: h.personality, rest: res[j].transcript.slice(h.end).replace(/^[\s,.:;!?\-]+/, "").trim() };
+        }
+        if (!hit) { hint('HEARD: "' + res[0].transcript.trim().slice(-36) + '"'); continue; }
+        pending = hit;
+        clearTimeout(_settleTimer);
+        if (res.isFinal) fire();
+        else _settleTimer = setTimeout(fire, 1100);              // give "Jarvis open Spotify" time to finish
+      }
+    };
+
+    rec.onerror = function (ev) {
+      if (g !== gen) return;
+      micProblem(ev);                                           // no-speech / aborted → onend restarts
+    };
+
+    rec.onend = function () {
+      if (g !== gen) return;
+      if (pending && !handled) { fire(); return; }
+      if (S.phase === "wakeword") scheduleWakeWord(250);        // Chrome ends sessions on its own — just restart
+    };
+
+    try { rec.start(); }
+    catch (e) { scheduleWakeWord(600); }
   }
 
-  function wakeDetected(personality) {
-    if (personality !== S.personality) {
-      wsSend({ type: "set_personality", personality: personality });
-    }
-    var ack = personality === "ULTRON" ? "State your purpose."
-            : personality === "FRIDAY" ? "Yeah, boss?"
-            : "Yes, sir?";
-    ttsSpeak(ack);
+  function wakeDetected(personality, rest) {
+    stopAllRec();
+    S.phase = "activating";
     setArc("ACTIVATED");
-    if (D.arcHint) D.arcHint.textContent = "WAKE WORD DETECTED";
+    hint("WAKE WORD DETECTED");
     addLog("» Wake word: " + personality, "init");
-    // Start command phase after brief pause so TTS starts
-    setTimeout(startCommandPhase, 700);
+
+    var switching = personality !== S.personality;
+    if (switching) wsSend({ type: "set_personality", personality: personality });
+
+    // Command said in the same breath → run it right away
+    if (rest && rest.length > 1) { S.phase = "idle"; sendCommand(rest); return; }
+
+    if (!switching) ttsSpeak(ACKS[personality] || "Yes?");      // (the switch greeting is the ack otherwise)
+    // Open the mic only after the acknowledgement has finished playing
+    whenQuiet(function () { if (S.phase === "activating") startCommandPhase(); });
   }
 
   // ── Phase 2: Command ─────────────────────────────────────────────────────────
   function startCommandPhase() {
     if (!SR || !S.connected) return;
     stopAllRec();
-    S.phase   = "command";
-    cmdFinal  = "";
-    cmdInterim = "";
+    S.phase = "command";
+    cmdFinal = ""; cmdInterim = "";
 
-    cmdRec = new SR();
-    cmdRec.continuous     = true;
-    cmdRec.interimResults = true;
-    cmdRec.lang           = "en-US";
-    cmdRec.maxAlternatives = 1;
+    var g = gen, heard = false;
+    var rec = cmdRec = newRec(true, 1);
 
-    cmdRec.onstart = function () {
+    rec.onstart = function () {
+      if (g !== gen) return;
       setListening(true);
       setArc("LISTENING");
-      if (D.arcHint) D.arcHint.textContent = "SPEAK NOW…";
-      if (D.input)   D.input.placeholder   = "Listening…";
+      hint("SPEAK NOW…");
+      if (D.input) D.input.placeholder = "Listening…";
     };
 
-    cmdRec.onresult = function (ev) {
+    rec.onresult = function (ev) {
+      if (g !== gen) return;
+      heard = true; netFails = 0;
       cmdInterim = "";
       for (var i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) cmdFinal += ev.results[i][0].transcript + " ";
@@ -436,89 +650,67 @@
       }
       if (D.input) D.input.value = (cmdFinal + cmdInterim).trim();
 
-      // Reset silence timer on every word heard
+      var last = ev.results[ev.results.length - 1];
+      clearTimeout(_idleTimer);
       clearTimeout(_silTimer);
-      _silTimer = setTimeout(function () {
-        var t = (cmdFinal + cmdInterim).trim();
-        if (t) {
-          cmdFinal = ""; cmdInterim = "";
-          if (D.input) D.input.value = "";
-          sendCommand(t);
-        } else {
-          stopCommandPhase();
-          scheduleWakeWord(500);
-        }
-      }, 2000); // 2s of silence = done speaking
+      _silTimer = setTimeout(finishCommand, last.isFinal ? 1000 : 1800);   // silence = done speaking
     };
 
-    cmdRec.onspeechend = function () {
-      // Speech stopped — fire faster
-      clearTimeout(_silTimer);
-      _silTimer = setTimeout(function () {
-        var t = (cmdFinal + cmdInterim).trim();
-        if (t) {
-          cmdFinal = ""; cmdInterim = "";
-          if (D.input) D.input.value = "";
-          sendCommand(t);
-        } else {
-          stopCommandPhase();
-          scheduleWakeWord(500);
-        }
-      }, 800);
-    };
+    rec.onerror = function (ev) { if (g === gen) micProblem(ev); };
+    rec.onend   = function ()   { if (g === gen) finishCommand(); };       // never lose what you already said
 
-    cmdRec.onerror = function (ev) {
-      if (ev.error === "not-allowed") { toast("Mic blocked", "error"); return; }
-      stopCommandPhase();
-      scheduleWakeWord(600);
-    };
+    // Nothing said at all → go back to wake word
+    _idleTimer = setTimeout(function () { if (g === gen && !heard) finishCommand(); }, 8000);
 
-    cmdRec.onend = function () {
-      if (S.phase === "command") {
-        stopCommandPhase();
-        scheduleWakeWord(500);
-      }
-    };
+    try { rec.start(); }
+    catch (e) { stopCommandPhase(); scheduleWakeWord(600); }
+  }
 
-    try { cmdRec.start(); }
-    catch (e) {
-      setTimeout(function () { try { if (cmdRec) cmdRec.start(); } catch (e2) {} }, 300);
-    }
+  function finishCommand() {
+    clearTimeout(_silTimer); clearTimeout(_idleTimer);
+    if (S.phase !== "command") return;
+    var t = (cmdFinal + cmdInterim).trim();
+    cmdFinal = ""; cmdInterim = "";
+    if (!t) { stopCommandPhase(); scheduleWakeWord(400); return; }
+    if (S.autoSend) { sendCommand(t); return; }
+    // auto-send OFF: leave the text in the box so you can edit it, press Enter to send
+    stopAllRec(); S.phase = "idle"; setListening(false); setArc("STANDBY");
+    if (D.input) { D.input.value = t; D.input.placeholder = "Type a command…"; D.input.focus(); }
   }
 
   function stopCommandPhase() {
-    clearTimeout(_silTimer);
     S.phase = "idle";
+    stopAllRec();
     setListening(false);
     setArc("STANDBY");
     if (D.input) { D.input.value = ""; D.input.placeholder = "Type a command…"; }
-    stopAllRec();
   }
 
-  // ── Manual mode (hold button/space) ─────────────────────────────────────────
+  // ── Manual mode (hold button / space) ────────────────────────────────────────
   function startManual() {
-    if (!SR) { toast("Speech recognition unavailable", "error"); return; }
+    if (!SR) { toast("Speech recognition unavailable — use Chrome", "error"); return; }
+    if (S.micBlocked) { toast("Microphone is blocked — allow it in the address bar and reload", "error"); return; }
     if (S.thinking || S.streaming) return;
+    if (S.phase === "manual") return;
 
+    stopSpeech();                       // talking over Jarvis interrupts him
     stopAllRec();
-    S.phase    = "manual";
-    manFinal   = "";
-    manInterim = "";
+    S.phase = "manual";
+    manFinal = ""; manInterim = ""; manStopping = false;
 
-    manRec = new SR();
-    manRec.continuous     = true;
-    manRec.interimResults = true;
-    manRec.lang           = "en-US";
-    manRec.maxAlternatives = 1;
+    var g = gen;
+    var rec = manRec = newRec(true, 1);
 
-    manRec.onstart = function () {
+    rec.onstart = function () {
+      if (g !== gen) return;
       setListening(true);
       setArc("LISTENING");
-      if (D.arcHint) D.arcHint.textContent = "HOLD & SPEAK…";
-      if (D.input)   D.input.placeholder   = "Listening…";
+      hint("HOLD & SPEAK…");
+      if (D.input) D.input.placeholder = "Listening…";
     };
 
-    manRec.onresult = function (ev) {
+    rec.onresult = function (ev) {
+      if (g !== gen) return;
       manInterim = "";
       for (var i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) manFinal += ev.results[i][0].transcript + " ";
@@ -527,49 +719,61 @@
       if (D.input) D.input.value = (manFinal + manInterim).trim();
     };
 
-    manRec.onerror = function (ev) {
-      if (ev.error !== "aborted") console.warn("Manual rec:", ev.error);
-    };
+    rec.onerror = function (ev) { if (g === gen) micProblem(ev); };
+    rec.onend   = function ()   { if (g === gen && manStopping) finishManual(); };
 
-    manRec.onend = function () {};
-
-    try { manRec.start(); }
-    catch (e) {
-      setTimeout(function () { try { if (manRec) manRec.start(); } catch (e2) {} }, 200);
-    }
+    try { rec.start(); }
+    catch (e) { S.phase = "idle"; setListening(false); scheduleWakeWord(500); }
   }
 
+  // Releasing the button: ask Chrome to finish, then WAIT for its final words.
+  // (Sending instantly used to cut off the last word or two of every command.)
   function stopManual() {
+    if (S.phase !== "manual" || manStopping) return;
+    manStopping = true;
+    hint("PROCESSING…");
+    try { if (manRec) manRec.stop(); } catch (e) {}
+    clearTimeout(_manTimer);
+    _manTimer = setTimeout(finishManual, 1500);   // safety net if onend never comes
+  }
+
+  function finishManual() {
+    if (!manStopping) return;
+    manStopping = false;
+    clearTimeout(_manTimer);
     var t = (manFinal + manInterim).trim() || (D.input ? D.input.value.trim() : "");
+    stopAllRec();
     S.phase = "idle";
     setListening(false);
     setArc("STANDBY");
     if (D.input) { D.input.placeholder = "Type a command…"; D.input.value = ""; }
-
-    try { if (manRec) manRec.stop(); } catch (e) {}
-    manRec = null;
-
     if (t) sendCommand(t);
-    else if (S.wakeWordEnabled && S.connected) setTimeout(function () { scheduleWakeWord(500); }, 200);
+    else scheduleWakeWord(400);
   }
 
   function stopAllRec() {
-    clearTimeout(_wakeTimer);
-    clearTimeout(_silTimer);
-    try { if (wakeRec) wakeRec.stop(); } catch (e) {} wakeRec = null;
-    try { if (cmdRec)  cmdRec.stop();  } catch (e) {} cmdRec  = null;
-    try { if (manRec)  manRec.stop();  } catch (e) {} manRec  = null;
+    gen++;                                        // every handler of the old recognizers becomes a no-op
+    clearTimeout(_wakeTimer); clearTimeout(_silTimer); clearTimeout(_idleTimer);
+    clearTimeout(_settleTimer); clearTimeout(_manTimer);
+    [wakeRec, cmdRec, manRec].forEach(function (r) {
+      if (!r) return;
+      r.onresult = r.onend = r.onerror = r.onstart = null;
+      try { r.abort(); } catch (e) {}
+    });
+    wakeRec = cmdRec = manRec = null;
   }
 
   function initSpeech() {
     if (!SR) {
       toast("Speech recognition not available — use Chrome", "warning");
       setStat("voice", 20, "UNSUPPORTED");
+      hint("VOICE UNSUPPORTED — USE CHROME");
       return;
     }
+    if (!window.isSecureContext) toast("Open JARVIS at http://localhost:3000 — the mic needs localhost or https", "warning");
     setStat("voice", 75, "READY");
     setDot("vo", true);
-    if (D.ttsModeDisp) D.ttsModeDisp.textContent = "Browser Speech API";
+    if (D.ttsModeDisp) D.ttsModeDisp.textContent = "Browser voice";
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -577,9 +781,8 @@
   // ════════════════════════════════════════════════════════════════════════════
   function sendCommand(text) {
     if (!text || !text.trim()) return;
-    if (SYN) SYN.cancel();
-
-    stopCommandPhase(); // clean up listeners — will restart after AI replies
+    stopSpeech();
+    stopCommandPhase();                 // clean up listeners — restarts after the AI replies
 
     if (!S.connected) {
       toast("Not connected to server", "error");
@@ -587,7 +790,7 @@
       return;
     }
 
-    wsSend({ type: "text_input", text: text.trim() });
+    if (!wsSend({ type: "text_input", text: text.trim() })) { scheduleWakeWord(1000); return; }
     if (D.input) D.input.value = "";
   }
 
@@ -905,6 +1108,17 @@
     return m[a.action] || a.action || "Action";
   }
 
+  function pollTTS() {
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (d) {
+      var t = d.tts || {};
+      if (t.kokoro === "unavailable" && !t.elevenlabs) serverTTSOff = true;
+      if (D.ttsModeDisp) D.ttsModeDisp.textContent = t.kokoro === "ready" ? "Kokoro ✓"
+        : t.kokoro === "loading" ? (t.elevenlabs ? "ElevenLabs ✓ (Kokoro loading…)" : "Browser voice (Kokoro loading…)")
+        : t.elevenlabs ? "ElevenLabs ✓" : "Browser voice";
+      if (t.kokoro === "loading") setTimeout(pollTTS, 5000);
+    }).catch(function () {});
+  }
+
   function fetchStatus() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (d) {
       if (D.ollamaDisp) {
@@ -914,12 +1128,16 @@
           ? d.model + " NOT FOUND — run: ollama pull " + d.model
           : d.model + " ✓";
       }
+      var t = d.tts || {};
+      if (t.voices) S.voiceNames = t.voices;
+      if (t.kokoro === "unavailable" && !t.elevenlabs) serverTTSOff = true;
       if (D.ttsModeDisp) {
-        D.ttsModeDisp.textContent = d.tts && d.tts.elevenlabs ? "ElevenLabs ✓"
-          : d.tts && d.tts.platform === "darwin" ? "macOS say + Browser"
-          : d.tts && d.tts.platform === "win32"  ? "Windows SAPI + Browser"
-          : "Browser Speech API";
+        D.ttsModeDisp.textContent = t.kokoro === "ready" ? "Kokoro ✓"
+          : t.kokoro === "loading" ? (t.elevenlabs ? "ElevenLabs ✓ (Kokoro loading…)" : "Browser voice (Kokoro loading…)")
+          : t.elevenlabs ? "ElevenLabs ✓"
+          : "Browser voice";
       }
+      if (t.kokoro === "loading") setTimeout(pollTTS, 5000);   // re-check until it's ready
       if (!d.ollama || !d.ollama.running)
         toast("⚠ Ollama not running — start: ollama serve", "error");
       else if (!d.ollama.modelFound)
@@ -997,14 +1215,27 @@
     if (D.settingsClose)   D.settingsClose.addEventListener("click", closeSettings);
     if (D.settingsOverlay) D.settingsOverlay.addEventListener("click", closeSettings);
 
+    // Settings → UI (they're remembered between visits)
+    if (D.wakeToggle) D.wakeToggle.checked = S.wakeWordEnabled;
+    if (D.wakeWordStat) D.wakeWordStat.textContent = S.wakeWordEnabled ? "ON" : "OFF";
+    var autoSendToggle = document.getElementById("auto-send-toggle");
+    if (autoSendToggle) {
+      autoSendToggle.checked = S.autoSend;
+      autoSendToggle.addEventListener("change", function (e) {
+        S.autoSend = e.target.checked;
+        savePref("autosend", S.autoSend);
+        toast("Auto-send " + (S.autoSend ? "on" : "off — press Enter to send"), "success");
+      });
+    }
+
     // Wake word toggle
     if (D.wakeToggle) D.wakeToggle.addEventListener("change", function (e) {
       S.wakeWordEnabled = e.target.checked;
+      savePref("wake", S.wakeWordEnabled);
       if (D.wakeWordStat) D.wakeWordStat.textContent = S.wakeWordEnabled ? "ON" : "OFF";
       if (S.wakeWordEnabled) {
         scheduleWakeWord(400);
       } else {
-        clearTimeout(_wakeTimer);
         stopAllRec();
         S.phase = "idle";
         setListening(false);

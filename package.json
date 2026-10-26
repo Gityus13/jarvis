@@ -1,7 +1,7 @@
 {
   "name": "jarvis-ai",
   "version": "3.0.0",
-  "description": "J.A.R.V.I.S. v3 — AI assistant with full Mac control, voice, and Iron Man HUD",
+  "description": "J.A.R.V.I.S. v3 \u2014 AI assistant with full Mac control, voice, and Iron Man HUD",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -19,5 +19,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
+  },
+  "optionalDependencies": {
+    "kokoro-js": "^1.2.1"
   }
 }

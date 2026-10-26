@@ -1,7 +1,8 @@
 const fetch = require("node-fetch");
+const { StringDecoder } = require("string_decoder");
 const BASE  = process.env.OLLAMA_URL || "http://localhost:11434";
 
-async function* streamOllama(model, systemPrompt, messages) {
+async function* streamOllama(model, systemPrompt, messages, opts = {}) {
   const res = await fetch(`${BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -9,14 +10,16 @@ async function* streamOllama(model, systemPrompt, messages) {
       model,
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       stream: true,
-      options: { temperature: 0.7, top_p: 0.9, num_predict: 2048 },
+      options: { temperature: 0.7, top_p: 0.9, num_predict: opts.numPredict || 2048 },
     }),
   });
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
 
+  // StringDecoder keeps multi-byte characters (ə ı ş ğ ö ü ç …) intact when a chunk splits them
+  const dec = new StringDecoder("utf8");
   let buf = "";
   for await (const chunk of res.body) {
-    buf += chunk.toString("utf8");
+    buf += dec.write(chunk);
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";
     for (const ln of lines) {
@@ -31,6 +34,7 @@ async function* streamOllama(model, systemPrompt, messages) {
       }
     }
   }
+  buf += dec.end();
   if (buf.trim()) {
     try { const p = JSON.parse(buf); if (p.message?.content) yield p.message.content; } catch {}
   }
@@ -38,7 +42,7 @@ async function* streamOllama(model, systemPrompt, messages) {
 
 async function checkOllama(model) {
   try {
-    const res  = await fetch(`${BASE}/api/tags`);
+    const res  = await fetch(`${BASE}/api/tags`, { timeout: 3000 });
     const data = await res.json();
     const models = data.models || [];
     const base = model.split(":")[0].toLowerCase();
