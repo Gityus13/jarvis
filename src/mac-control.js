@@ -442,11 +442,14 @@ async function getWifi() {
 }
 
 // ─── Clipboard ─────────────────────────────────────────────────────────────────
+async function readClipboard() {
+  if (IS_MAC)      return run("pbpaste");
+  if (IS_WIN)      return ps("Get-Clipboard");
+  return run("sh", ["-c", "xclip -o -selection clipboard 2>/dev/null || xsel -b 2>/dev/null"]).catch(() => "");
+}
+
 async function getClipboard() {
-  let out = "";
-  if (IS_MAC)      out = await run("pbpaste");
-  else if (IS_WIN) out = await ps("Get-Clipboard");
-  else             out = await run("sh", ["-c", "xclip -o -selection clipboard 2>/dev/null || xsel -b 2>/dev/null"]).catch(() => "");
+  const out = await readClipboard();
   return out ? `Clipboard: ${out.slice(0, 200)}` : "Clipboard is empty";
 }
 
@@ -667,7 +670,15 @@ async function windowFullscreen(app) {
   return `${app ? resolveApp(app) : "Window"} fullscreen toggled`;
 }
 
+/** macOS: does the app running node have Accessibility permission (needed for keystrokes/mouse)? */
+async function checkAccessibility() {
+  if (!IS_MAC) return null;
+  try { return (await as(`tell application "System Events" to return UI elements enabled`, 6000)) === "true"; }
+  catch { return false; }
+}
+
 module.exports = {
   executeMacCommand, getScreenSize,
+  as, run, setClipboard, readClipboard, checkAccessibility, hasRobot: () => !!robot,
   _internal: { parseCombo, parseWhen, asq, homePath, normUrl, cleanAppName },
 };

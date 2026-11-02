@@ -16,6 +16,13 @@ const { loadPlugins }               = require("./src/plugin-loader");
 const { logger }                    = require("./src/logger");
 const { getMemory, saveMemory }     = require("./src/memory");
 const { PERSONALITIES, getPersonality } = require("./src/personalities");
+const skills       = require("./src/skills");
+const localSkills  = require("./src/skills/local");
+const webSkills    = require("./src/skills/web");
+const telemetry    = require("./src/telemetry");
+const diagnostics  = require("./src/diagnostics");
+const catalog      = require("./src/catalog");
+const store        = require("./src/store");
 
 const PORT  = process.env.PORT || 3000;
 const HOST  = process.env.HOST || "127.0.0.1";   // localhost only by default (this thing controls your Mac!)
@@ -49,6 +56,7 @@ const plugins = loadPlugins(path.join(__dirname, "plugins"));
 
 // Kokoro voice (optional) — loads in the background, safe if not installed
 kokoro.load();
+telemetry.start();
 
 app.use((req, res, next) => {
   if (!hostOk(req.headers.host) || !originOk(req.headers.origin)) return res.status(403).send("Forbidden");
@@ -128,6 +136,35 @@ function friendly(e) {
   return m.replace(/\s+/g, " ").slice(0, 160);
 }
 
+// ─── Broadcast / AI helpers ────────────────────────────────────────────────────
+function broadcast(data) { for (const c of wss.clients) safe(c, data); }
+const broadcastData = () => broadcast({ type: "data", data: store.snapshot() });
+
+async function askAI(system, prompt) {
+  let out = "";
+  for await (const c of streamOllama(MODEL, system, [{ role: "user", content: prompt }], { numPredict: 1500 })) out += c;
+  return out;
+}
+
+// Reminders / timers / alarms fire → every open console gets an alert (and speaks it)
+localSkills.setNotifier((r, late) => {
+  const text = r.kind === "timer" ? `${r.label || "Timer"} complete.` : r.kind === "alarm" ? "Alarm." : `Reminder: ${r.label}.`;
+  broadcast({ type: "alert", kind: r.kind, title: (r.kind || "alert").toUpperCase(), text: late ? text.replace(/\.$/, "") + " (missed while offline)." : text });
+  broadcastData();
+});
+localSkills.startScheduler();
+
+/** Send a skill result to the console: spoken line, then card, then side effects */
+function sendResult(ws, sess, r) {
+  sess.history.push({ role: "assistant", content: r.sensitive ? "[sensitive output withheld]" : r.say });
+  if (sess.history.length > 40) sess.history.splice(0, 2);
+  safe(ws, { type: "jarvis_response", text: r.say, skill: r.skill });
+  if (r.card) safe(ws, { type: "card", card: r.card, skill: r.skill });
+  if (r.refresh === "data") broadcastData();
+  if (r.refresh === "intel") broadcast({ type: "refresh", what: "intel" });
+  if (r.ui) safe(ws, { type: "ui", open: r.ui });
+}
+
 // ─── Handle one user message ───────────────────────────────────────────────────
 async function handleText(ws, sess, sid, text) {
   safe(ws, { type: "user_message", text });
@@ -147,6 +184,20 @@ async function handleText(ws, sess, sid, text) {
 
   sess.history.push({ role: "user", content: text });
   if (sess.history.length > 40) sess.history.splice(0, 2);
+
+  // Mode switch: "switch to friday"
+  const sw = text.trim().toLowerCase().replace(/[.!?]+$/, "").match(/^(?:switch|change|go)\s+(?:to\s+)?(jarvis|friday|ultron)(?:\s+mode)?$/);
+  if (sw) {
+    const key = sw[1].toUpperCase();
+    sess.personality = key;
+    persist();
+    safe(ws, { type: "personality_changed", personality: key, greeting: getPersonality(key).switchMessage });
+    return;
+  }
+
+  // Skills: weather, news, markets, timers, tasks, notes, system, music, files, briefing …
+  const sk = await skills.handle(text, { ai: askAI, personality: sess.personality });
+  if (sk) { sendResult(ws, sess, sk); persist(); return; }
 
   // Direct command routing — runs the action ONCE and answers without the AI
   // (it used to ALSO ask the AI, which ran the same action a second time)
@@ -234,6 +285,10 @@ async function handleText(ws, sess, sid, text) {
         const { name } = await toDesktop(fc, action.filetype || "txt");
         safe(ws, { type: "action_done", action, result: `Saved to Desktop: ${name}` });
       } catch (e) { safe(ws, { type: "action_error", error: friendly(e) }); }
+    } else if (action?.action === "skill" && action.text) {
+      const r = await skills.handle(String(action.text), { ai: askAI, personality: sess.personality });
+      if (r) sendResult(ws, sess, r);
+      else safe(ws, { type: "jarvis_response", text: "I couldn't do that one." });
     } else if (action && action.action && action.action !== "none") {
       safe(ws, { type: "action_start", action });
       try {
@@ -270,7 +325,10 @@ wss.on("connection", (ws, req) => {
     personality: sess.personality,
     personalities: Object.keys(PERSONALITIES),
     message: getPersonality(sess.personality).greeting,
+    user: process.env.USER_NAME || "sir",
+    profiles: Object.fromEntries(Object.entries(PERSONALITIES).map(([k, v]) => [k, { name: v.name, tag: v.tag, description: v.description }])),
   });
+  safe(ws, { type: "data", data: store.snapshot() });
 
   ws.on("message", async raw => {
     try {
@@ -286,6 +344,22 @@ wss.on("connection", (ws, req) => {
         sess.personality = key;
         saveMemory(sid, { history: sess.history, personality: key });
         safe(ws, { type: "personality_changed", personality: key, greeting: getPersonality(key).switchMessage });
+        return;
+      }
+
+      if (msg.type === "task_add") {
+        const tx = String(msg.text ?? "").trim().slice(0, 200);
+        if (tx) { store.db().tasks.push({ id: store.nextId(), text: tx.charAt(0).toUpperCase() + tx.slice(1), done: false, created: Date.now() }); store.save(); broadcastData(); }
+        return;
+      }
+
+      if (msg.type === "task_toggle" || msg.type === "task_delete" || msg.type === "note_delete" || msg.type === "reminder_cancel") {
+        const db = store.db(), id = Number(msg.id);
+        if (msg.type === "task_toggle")    { const t = db.tasks.find((x) => x.id === id); if (t) t.done = !t.done; }
+        if (msg.type === "task_delete")    db.tasks = db.tasks.filter((x) => x.id !== id);
+        if (msg.type === "note_delete")    db.notes = db.notes.filter((x) => x.id !== id);
+        if (msg.type === "reminder_cancel") db.reminders = db.reminders.filter((x) => x.id !== id);
+        store.save(); broadcastData();
         return;
       }
 
@@ -337,6 +411,21 @@ app.get("/api/status", async (_, res) => {
   });
 });
 
+app.get("/api/telemetry", (_, res) => res.json(telemetry.snapshot()));
+app.get("/api/data",      (_, res) => res.json(store.snapshot()));
+app.get("/api/commands",  (_, res) => res.json(catalog));
+app.get("/api/diagnostics", async (_, res) => {
+  try { res.json(await diagnostics.runAll(MODEL)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/intel", async (_, res) => {
+  const wrap = async (fn) => { try { return { ok: true, data: await fn() }; } catch (e) { return { ok: false, error: e.message }; } };
+  const [weather, news, tech, markets] = await Promise.all([
+    wrap(() => webSkills.weatherData()), wrap(() => webSkills.headlines("world", 7)),
+    wrap(() => webSkills.headlines("tech", 5)), wrap(() => webSkills.marketsData()),
+  ]);
+  res.json({ weather, news, tech, markets, t: Date.now() });
+});
+
 // Text → audio for the BROWSER to play.
 //   Kokoro (if ready) → ElevenLabs (if key set) → 501/503 → browser uses its normal voice
 app.post("/api/tts", async (req, res) => {
@@ -378,7 +467,7 @@ app.post("/api/command", async (req, res) => {
 });
 
 app.get("/api/personalities", (_, res) =>
-  res.json(Object.entries(PERSONALITIES).map(([k, p]) => ({ id: k, name: p.name, description: p.description, color: p.color }))));
+  res.json(Object.entries(PERSONALITIES).map(([k, p]) => ({ id: k, name: p.name, description: p.description, tag: p.tag }))));
 
 app.get("/api/plugins", (_, res) =>
   res.json(plugins.map(p => ({ name: p.name, description: p.description || "" }))));

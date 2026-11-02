@@ -64,6 +64,10 @@ function routeCommand(input) {
   m = fixDots(s).match(/^(?:open|go to|visit|launch|browse to)\s+(\S+)$/i);
   if (m && DOMAIN.test(m[1])) return { action: "open_url", url: m[1] };
 
+  // Open a file (from file-search results)
+  m = s.match(/^open\s+(?:the\s+)?file\s+(.+)$/i);
+  if (m) return { action: "open_file", path: m[1].trim() };
+
   // Open app
   m = s.match(/^(?:open|launch|start)\s+(.+)$/i);
   if (m) { const app = appName(m[1]); if (app && shortName(app)) return { action: "open_app", app }; }

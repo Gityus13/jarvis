@@ -1,7 +1,7 @@
 {
   "name": "jarvis-ai",
-  "version": "3.0.0",
-  "description": "J.A.R.V.I.S. v3 \u2014 AI assistant with full Mac control, voice, and Iron Man HUD",
+  "version": "4.0.0",
+  "description": "JARVIS \u2014 tactical intelligence console: voice, local AI, live intel, Mac control",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

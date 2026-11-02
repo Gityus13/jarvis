@@ -1,367 +1,114 @@
-# J.A.R.V.I.S. v3.0
+# J.A.R.V.I.S. — Tactical Intelligence Core
 
-> *"Good day, sir. All systems online."*
+A private AI command console that runs on **your** machine: local LLM (Ollama), voice in / voice out,
+live intel feeds, real system telemetry, and full Mac control. No cloud accounts. No API keys required.
 
-A fully local Iron Man AI assistant with wake-word detection, streaming AI responses, voice output, and complete Mac control via keyboard, mouse, and AppleScript. Runs entirely on your machine — no cloud required.
+![console](demo.png)
 
-<p align="center">
-  <img src="demo.png" alt="JARVIS Interface Demo" width="80%">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/version-3.0-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/status-active-success?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Node.js-18%2B-green?style=for-the-badge&logo=nodedotjs">
-  <img src="https://img.shields.io/badge/Ollama-local-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/platform-macOS-lightgrey?style=for-the-badge&logo=apple">
-  <br>
-  <img src="https://img.shields.io/badge/Mac%20Control-Full-red?style=for-the-badge">
-  <img src="https://img.shields.io/badge/wake--word-Hey%20JARVIS-ff69b4?style=for-the-badge">
-  <img src="https://img.shields.io/badge/TTS-ElevenLabs%20%7C%20macOS-9cf?style=for-the-badge">
-  <img src="https://img.shields.io/badge/WebSocket-✅-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/RAG-enabled-green?style=for-the-badge">
-  <br>
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge">
-  <img src="https://img.shields.io/github/stars/Gityus13/jarvis?style=for-the-badge&logo=github">
-  <img src="https://img.shields.io/github/forks/Gityus13/jarvis?style=for-the-badge&logo=github">
-  <img src="https://img.shields.io/github/issues/Gityus13/jarvis?style=for-the-badge&logo=github">
-  <img src="https://img.shields.io/github/repo-size/Gityus13/jarvis?style=for-the-badge">
-  <img src="https://img.shields.io/github/last-commit/Gityus13/jarvis?style=for-the-badge">
-</p>
-
----
-
-## Features
-
-### AI
-- **Streaming responses** — words appear one by one as JARVIS thinks
-- **3 personalities** — J.A.R.V.I.S., F.R.I.D.A.Y., U.L.T.R.O.N.
-- **Conversation memory** — history saved to disk, survives restarts
-- **Large file output** — essays, code, reports saved to Desktop automatically
-
-### Voice
-- **Two-phase wake word** — say "Hey JARVIS" → JARVIS activates → then speak your command
-- **Always listening** — passive wake word detection runs in background
-- **Browser TTS** — speaks every response (summarizes long answers)
-- **ElevenLabs support** — premium realistic voice (optional API key)
-- **System voice fallback** — Daniel/Moira/Alex voices per personality (via your browser)
-
-### Mac Control (real OS-level)
-- **Keyboard** — type text, press any key combo (Cmd+C, Cmd+Tab, etc.)
-- **Mouse** — move, click, double-click, right-click, scroll anywhere on screen
-- **Apps** — open/close any app by name
-- **System** — volume, battery, WiFi, lock screen, sleep, empty trash
-- **Files** — create folders, move to trash, open files
-- **Clipboard** — read and write
-- **Calendar** — read today's events, add new events
-- **Messages** — send iMessages
-- **Screenshots** — saves to Desktop
-- **Window management** — snap left/right, fullscreen (requires Rectangle app)
-- **Shortcuts** — trigger any macOS Shortcut by name
-- **Web** — search Google, open URLs
-
-### UI
-- Iron Man HUD with animated arc reactor
-- Real-time audio waveform
-- Hex grid background
-- 3 personality color themes
-- Toast notifications
-- Command log
-- Settings panel
-- Export conversation to .txt or .json
-
----
-
-## Requirements
-
-- **macOS** (Ventura or later recommended — Windows/Linux partially supported)
-- **Node.js** v18+
-- **Ollama** — [download](https://ollama.com)
-- **Google Chrome** — required for Web Speech API (voice recognition)
-- **Rectangle** (optional) — for window snapping: [rectangleapp.com](https://rectangleapp.com)
-
----
-
-## Setup
-
-### 1. Clone & install
+## Quick start
 
 ```bash
-git clone https://github.com/Gityus13/jarvis.git
-cd jarvis
+# 1. AI engine (once)
+brew install ollama && ollama serve          # other OS: https://ollama.com
+ollama pull llama3.2                         # or any model, then set OLLAMA_MODEL in .env
+
+# 2. JARVIS
+cp .env.example .env                         # set USER_NAME, HOME_CITY, model …
 npm install
-```
-
-> **Note:** `npm install` compiles `@jitsi/robotjs` for native keyboard/mouse control.
-> You need Xcode Command Line Tools on Mac: `xcode-select --install`
-
-### 2. Configure
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` — at minimum set your Ollama model:
-
-```env
-OLLAMA_MODEL=gpt-oss:120b-cloud
-```
-
-### 3. Start Ollama
-
-```bash
-# In a separate terminal:
-ollama serve
-ollama pull gpt-oss:120b-cloud
-```
-
-### 4. Start JARVIS
-
-```bash
 npm start
 ```
 
-### 5. Open in Chrome
+Open **http://localhost:3000** in **Chrome** (voice needs Chrome/Edge + the `localhost` address).
+macOS permissions (keyboard, screenshots, calendar): `bash setup-permissions.sh`.
 
-```
-http://localhost:3000
-```
+Optional neural voice: `npm i kokoro-js` — used automatically when installed (~90 MB model, downloaded once).
 
-Allow microphone when Chrome asks.
+## The console
 
----
+| Area | What it shows (all real data) |
+|---|---|
+| **Core** (centre) | Animated core that reacts to state: standby · listening (your mic level) · processing (radar sweep) · responding |
+| **Telemetry** (left) | Live CPU / memory / disk / battery / network latency with sparklines, top processes, host info |
+| **Intel** (right) | Weather, markets (crypto + FX), headlines (world / tech), tasks, timers with live countdowns, notes |
+| **Feed** (centre) | Conversation, executed actions and result cards |
+| **SYSTEMS** | Self-diagnostics: what works, what doesn't, and the exact fix |
+| **COMMANDS** (`Ctrl+K`) | Searchable index of everything JARVIS can do |
 
-## How to Talk to JARVIS
+Three operating modes — **JARVIS** (composed, dry), **FRIDAY** (fast, direct), **ULTRON** (cold, clinical) —
+each with its own colour, voice and tone. Switch with the top bar, or say *"switch to Friday"*.
 
-| Method | What to do |
-|--------|-----------|
-| **Wake word** | Say "Hey JARVIS" → wait for "Yes, sir?" → speak your command |
-| **Hold mic button** | Click and hold the mic icon → speak → release |
-| **Hold SPACE** | Hold spacebar → speak → release |
-| **Type** | Type in the input box → Enter |
-| **Quick buttons** | Click any button in the right panel |
+## Voice
 
-**Wake words:**
-- `Hey JARVIS` or `JARVIS` → activates J.A.R.V.I.S.
-- `Hey FRIDAY` or `FRIDAY` → switches to F.R.I.D.A.Y.
-- `Ultron` or `Hey Ultron` → switches to U.L.T.R.O.N.
+* Say **"Hey Jarvis"** (also *Friday*, *Ultron*) — fuzzy matched, so *"Travis"* / *"jar vis"* work too.
+  Say the command in the same breath (*"Jarvis, what's the weather"*) or wait for the acknowledgement.
+* Or **hold SPACE** (or the mic button), speak, release.
+* JARVIS never listens while it is speaking, so it can't hear itself.
+* Voice output order: **Kokoro** (if installed) → **ElevenLabs** (if key set) → your system voice.
 
----
+## What you can say
 
-## Example Commands
+| | |
+|---|---|
+| **Briefing** | "daily briefing" · "good morning" — time, weather, tasks, calendar, top headline |
+| **Weather** | "weather" · "weather in Tokyo" · "will it rain tomorrow" |
+| **News** | "news" · "tech news" · "business news" · "science news" · "sport news" |
+| **Markets** | "bitcoin price" · "crypto" · "convert 100 usd to azn" · "50 euros in manat" |
+| **Knowledge** | "who is Nikola Tesla" · "define ephemeral" · "time in Tokyo" |
+| **Translate** | "translate good morning to Azerbaijani" · "how do you say thank you in Turkish" |
+| **Timers** | "timer for 10 minutes" · "remind me in 20 minutes to call mom" · "remind me at 5pm to …" · "alarm for 7:30" · "focus session" |
+| **Tasks / notes** | "add task buy milk" · "my tasks" · "complete task 2" · "take a note: …" · "show my notes" |
+| **System** | "system status" · "what's using my CPU" · "disk space" · "battery" · "wifi" · "my IP address" |
+| **Music** | "play" · "pause" · "next song" · "what's playing" (Spotify / Apple Music) |
+| **Files** | "find file resume.pdf" (click a result to open) · "create a folder called Projects" |
+| **Clipboard AI** | "summarize my clipboard" · "fix my clipboard" · "translate my clipboard to Turkish" |
+| **Utilities** | "calculate 15% of 240" · "convert 5 km to miles" · "generate a password" · "flip a coin" · "roll a d20" |
+| **Mac control** | "open Spotify" · "close Chrome" · "screenshot" · "volume up" · "lock screen" · "snap Safari to the left" · "type …" · "press command shift 4" |
+| **Anything else** | Goes to the local AI — it can also call every skill above on its own |
 
-```
-"Open Chrome"
-"Search for best restaurants in Baku"
-"Take a screenshot"
-"What's my battery?"
-"Volume up"
-"Mute"
-"Lock the screen"
-"What's on my calendar today?"
-"Add meeting at 3pm called Standup"
-"Copy hello world to clipboard"
-"Type Hello World"
-"Press Cmd+Tab"
-"Move mouse to 500 300"
-"Click"
-"Scroll down"
-"Snap Chrome to the left"
-"Fullscreen Spotify"
-"Send John a message: I'll be late"
-"Write me an essay about AI"
-"Create a folder called Projects"
-"What's in my clipboard?"
-```
+Timers, reminders and alarms keep running if you close the page and fire a spoken alert when you return.
 
----
+## Free services used (no keys, no accounts)
 
-## Voice Setup
+Open-Meteo (weather + geocoding) · ipwho.is (location, IP) · CoinGecko (crypto) · open.er-api.com (FX rates) ·
+BBC RSS + Hacker News (headlines) · Wikipedia · dictionaryapi.dev · MyMemory (translation).
+Everything degrades gracefully offline — the console tells you what's unavailable instead of failing silently.
 
-**Kokoro (free, local, natural — recommended):**
-```bash
-npm install          # kokoro-js is an optional dependency, installs automatically
-npm start            # first run downloads the ~90MB voice model, then it's cached
-```
-Settings → Voice Engine shows `Kokoro ✓` when it's active. If Kokoro isn't installed,
-is still loading, or fails for any reason, J.A.R.V.I.S. automatically uses the normal
-browser voice instead — nothing breaks. Pick voices in `.env` (`KOKORO_VOICE_JARVIS=bm_george`,
-...) or turn it off with `KOKORO=off`.
+## Troubleshooting
 
-Voice order: **Kokoro → ElevenLabs → your system voice** (the first one that works is used).
+Open **SYSTEMS** in the top bar — it checks the AI engine, microphone, speech recognition, internet,
+keyboard/mouse control and macOS Accessibility permission, and prints the fix for anything that's off.
 
-**System voices (built-in, free):**
-```bash
-# List available voices:
-say -v '?'
-# Set in .env:
-JARVIS_VOICE=Daniel
-FRIDAY_VOICE=Moira
-ULTRON_VOICE=Alex
-```
+* **Mic not hearing you:** use Chrome at `http://localhost:3000`, allow the microphone. While waiting for the wake word
+  the centre of the console shows `HEARD: "…"` — if that never changes, the mic isn't reaching Chrome.
+  Chrome's speech recognition needs internet.
+* **Typing / clicking does nothing:** grant **Accessibility** to the app that runs `node` (Terminal / iTerm / VS Code) in
+  System Settings → Privacy & Security.
+* **Calendar says access denied:** System Settings → Privacy → Calendars (and Automation) → allow your `node` binary.
 
-**ElevenLabs (premium, realistic):**
-1. Get a free API key at [elevenlabs.io](https://elevenlabs.io)
-2. Add to `.env`: `ELEVENLABS_API_KEY=your_key_here`
-3. Restart
+## Configuration (`.env`)
 
-**Mic not hearing you?**
-- Use **Chrome**, open `http://localhost:3000` (the mic needs localhost or https), allow the microphone.
-- The top of the HUD shows `HEARD: "…"` while it listens for the wake word — if that text never changes, the mic isn't reaching Chrome.
-- Chrome's speech recognition needs internet (it uses Google's service).
-- Hold **SPACE** or the mic button to talk without the wake word.
-
----
-
-## Permissions (macOS) — Full Access Setup
-
-macOS blocks apps by default. Run the included script to open every panel:
-
-```bash
-bash setup-permissions.sh
-```
-
-Or grant manually — open **System Settings → Privacy & Security** and toggle ON for **Terminal** (and/or **node**) in each section:
-
-| Permission | Required for | Where |
-|-----------|-------------|-------|
-| **Microphone** | Voice input in Chrome | Chrome will ask automatically |
-| **Accessibility** | Keyboard/mouse control (robotjs) | Privacy → Accessibility |
-| **Automation → Finder** | File operations, trash | Privacy → Automation |
-| **Automation → Calendar** | Reading/adding events | Privacy → Automation |
-| **Automation → Messages** | Sending iMessages | Privacy → Automation |
-| **Automation → System Events** | Key presses, window control | Privacy → Automation |
-| **Calendars** | Direct calendar access | Privacy → Calendars |
-| **Contacts** | Looking up contacts by name | Privacy → Contacts |
-| **Full Disk Access** | Reading/writing any file | Privacy → Full Disk Access |
-| **Screen Recording** | Taking screenshots | Privacy → Screen Recording |
-
-**If Terminal is not listed in a panel:**
-1. Click **+**
-2. Press **Cmd+Shift+G**
-3. Paste the path from `which node` (e.g. `/usr/local/bin/node`)
-4. Click Open, toggle ON
-
-**After granting permissions**, macOS will ask again the first time each feature runs — click **Allow**.
-
-**Quick links** (paste in Terminal):
-```bash
-# Open each permission panel directly:
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts"
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-```
-
----
-
-## Plugin System
-
-Drop a `.js` file into `/plugins/`:
-
-```js
-module.exports = {
-  name: "Weather",
-  description: "Gets weather info",
-
-  matches(input) {
-    return /\b(weather|temperature|forecast)\b/i.test(input);
-  },
-
-  async execute(input, { ws, session }) {
-    // fetch an API, run shell commands, anything
-    return "It's 24°C and sunny in Baku.";
-  }
-};
-```
-
-Restart server — JARVIS auto-loads all `.js` files in `/plugins`.
-
----
-
-## REST API
-
-```bash
-# Status
-GET  /api/status
-
-# Send a command
-POST /api/command
-{"text": "Open Chrome", "personality": "JARVIS"}
-
-# List personalities
-GET  /api/personalities
-
-# List plugins
-GET  /api/plugins
-
-# View logs
-GET  /api/logs
-```
-
----
-
-## Project Structure
-
-```
-jarvis/
-├── server.js              # WebSocket + REST server
-├── .env.example           # Configuration template
-├── src/
-│   ├── ollama.js          # Streaming Ollama client
-│   ├── personalities.js   # JARVIS / FRIDAY / ULTRON prompts
-│   ├── mac-control.js     # Full Mac automation + robotjs
-│   ├── tts.js             # ElevenLabs synthesis
-│   ├── kokoro.js          # Optional local Kokoro TTS
-│   ├── command-router.js  # Fast command pre-processing
-│   ├── memory.js          # Conversation persistence
-│   ├── logger.js          # Logging
-│   └── plugin-loader.js   # Auto plugin loader
-├── public/
-│   ├── index.html         # Iron Man HUD
-│   ├── css/style.css      # Themes + animations
-│   └── js/app.js          # Frontend: voice, WebSocket, arc reactor
-└── plugins/               # Drop .js plugins here
-```
-
----
-
-## Built With
-
-- [Ollama](https://ollama.com) — Local LLM inference
-- [robotjs](https://github.com/jitsi/robotjs) — Native keyboard/mouse control
-- [ElevenLabs](https://elevenlabs.io) — Premium TTS (optional)
-- [Express](https://expressjs.com) + [ws](https://github.com/websockets/ws) — Server
-- [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) — Voice recognition
-- [Kokoro](https://github.com/hexgrad/kokoro) — Free local TTS (optional)
-- AppleScript + `osascript` — Mac automation
-
----
+`OLLAMA_MODEL`, `USER_NAME`, `HOME_CITY`, `HOME_CURRENCY`, `UNITS`, `ELEVENLABS_API_KEY`, `KOKORO_*`,
+`JARVIS_VOICE` / `FRIDAY_VOICE` / `ULTRON_VOICE`, `PORT`, `HOST`, `ALLOWED_HOSTS` — see `.env.example`.
 
 ## Security
 
-JARVIS only accepts connections from your own computer (`127.0.0.1`), and the server rejects WebSocket/API requests whose `Origin`/`Host` isn't localhost — so a random website you visit can't drive your Mac through it. **Never expose port 3000 to the internet** — it has full keyboard, mouse, and Mac control. To use it from another device on your LAN, set `HOST=0.0.0.0` and `ALLOWED_HOSTS=<your-ip>` in `.env`.
+JARVIS can type, click and run apps on your computer, so it is locked down: it only listens on `127.0.0.1`, rejects any
+WebSocket/API request whose `Origin`/`Host` isn't localhost (a random website can't drive your Mac), never builds shell
+commands from text, limits file actions to your home folder, and never speaks or stores generated passwords.
+**Never expose port 3000 to the internet.** For LAN use set `HOST=0.0.0.0` and `ALLOWED_HOSTS=<your-ip>`.
 
----
+## Project layout
 
-*Built by [Gityus13](https://github.com/Gityus13) · Powered by Ollama · Iron Man aesthetic*
+```
+server.js                 HTTP + WebSocket server, request flow
+src/skills/               web.js (online skills) · local.js (offline skills) · index.js (router, briefing)
+src/mac-control.js        macOS / keyboard / mouse control (no shell injection)
+src/telemetry.js          real CPU / memory / disk / battery / process sampling
+src/diagnostics.js        self-checks behind the SYSTEMS panel
+src/personalities.js      the three operating modes
+src/store.js              tasks · notes · reminders (data/jarvis-data.json)
+public/                   console UI: core.js (visual) · voice.js (speech) · app.js (UI)
+plugins/                  drop-in extensions: export { name, matches(text), execute(text) }
+```
 
-<div align="center">
-  
-```text
-██████╗ ██╗████████╗██╗   ██╗██╗   ██╗███████╗     ██╗██████╗ 
-██╔════╝ ██║╚══██╔══╝╚██╗ ██╔╝██║   ██║██╔════╝    ███║╚════██╗
-██║  ███╗██║   ██║    ╚████╔╝ ██║   ██║███████╗    ╚██║ █████╔╝
-██║   ██║██║   ██║     ╚██╔╝  ██║   ██║╚════██║     ██║ ╚═══██╗
-╚██████╔╝██║   ██║      ██║   ╚██████╔╝███████║     ██║██████╔╝
- ╚═════╝ ╚═╝   ╚═╝      ╚═╝    ╚═════╝ ╚══════╝     ╚═╝╚═════╝ 
-
-
-     ██╗ █████╗ ██████╗ ██╗   ██╗██╗███████╗
-     ██║██╔══██╗██╔══██╗██║   ██║██║██╔════╝
-     ██║███████║██████╔╝██║   ██║██║███████╗
-██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║
-╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║
- ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝
+MIT licensed.
