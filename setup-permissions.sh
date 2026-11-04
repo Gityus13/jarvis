@@ -8,7 +8,7 @@
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║     J.A.R.V.I.S. — macOS Permissions Setup (v2 FIXED)       ║"
+echo "║     J.A.R.V.I.S. — macOS Permissions Setup (v2 FIXED)        ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
