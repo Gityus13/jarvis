@@ -30,16 +30,39 @@ No cloud accounts. No API keys.
 * 🛠 **Self-diagnosing** — a `SYSTEMS` panel (and `npm run doctor`) shows what works and the exact fix for what doesn't.
 * 🔌 **Extensible** — drop a `.js` file in `plugins/` to add your own commands.
 
+
 ## Quick start
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Gityus13/jarvis.git
 cd jarvis
-./setup.sh          # installs, creates .env, checks Ollama, offers to download a model
+```
+
+### 2. Run the installer
+
+```bash
+bash setup.sh
+```
+
+The installer automatically:
+- Checks your Node.js version.
+- Installs project dependencies.
+- Creates your `.env` configuration file.
+- Checks whether Ollama is installed and running.
+- Offers to download your selected AI model.
+- Offers to configure macOS permissions (macOS only).
+
+### 3. Start J.A.R.V.I.S.
+
+```bash
 npm start
 ```
 
-Open **http://localhost:3000** in **Chrome** (or Edge) and press any key on the boot screen.
+### 4. Open the console
+
+Open **http://localhost:3000** in **Chrome** or **Edge** and press any key on the boot screen.
 
 <details>
 <summary>Manual install</summary>
