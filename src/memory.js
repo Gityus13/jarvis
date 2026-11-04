@@ -1,7 +1,7 @@
 const path = require("path");
 const fs   = require("fs-extra");
 
-const DATA_DIR   = path.join(__dirname, "../data");
+const DATA_DIR   = require("./paths").DATA;
 const GLOBAL_MEM = path.join(DATA_DIR, "memory.json");
 const MAX_MSGS   = 100;
 const safeId     = (id) => String(id).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64) || "x";

@@ -44,6 +44,7 @@ function run(file, args = [], { timeout = 12000, input, env } = {}) {
       }
     );
     child.on("error", () => {}); // ENOENT is reported through the callback
+    if (child.stdin) child.stdin.on("error", () => {});   // program exited before reading stdin (EPIPE) — not our problem
     try { child.stdin.end(input == null ? undefined : String(input)); } catch {}
   });
 }

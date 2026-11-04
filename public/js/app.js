@@ -246,17 +246,22 @@
     var n = S.tele && S.tele.net;
     chip("chip-net", n ? (n.ok ? (n.ms > 400 ? "wn" : "ok") : "bad") : "", n && n.ms ? n.ms + " ms" : "");
     var t = s && s.tts;
-    chip("chip-voice", t ? (t.kokoro === "ready" || t.elevenlabs ? "ok" : "wn") : "", t ? (t.kokoro === "ready" ? "Kokoro neural voice" : t.elevenlabs ? "ElevenLabs" : "System voice") : "");
+    chip("chip-voice", t ? (t.kokoro === "ready" || t.elevenlabs ? "ok" : "wn") : "", t ? (t.kokoro === "ready" ? "Kokoro neural voice" : t.elevenlabs ? "ElevenLabs" : t.kokoro === "loading" ? "Kokoro loading — system voice for now" : "System voice") : "");
     chip("chip-mic", !Voice.supported() ? "bad" : Voice.micBlocked() ? "bad" : (ph === "command" || ph === "manual") ? "act" : ph === "wakeword" ? "ok" : "", Voice.supported() ? "" : "Speech recognition needs Chrome");
   }
 
   function fetchStatus() {
     return fetch("/api/status").then(function (r) { return r.json(); }).then(function (d) {
       S.status = d; S.voiceNames = d.tts && d.tts.voices;
-      if (d.tts && d.tts.kokoro === "unavailable" && !d.tts.elevenlabs) Voice.setServerTTSOff(true);
-      if (d.tts && d.tts.kokoro === "loading") setTimeout(fetchStatus, 5000);
+      var k = (d.tts && d.tts.kokoroInfo) || {};
+      Voice.setServerTTSOff(d.tts.kokoro === "unavailable" && !d.tts.elevenlabs);      // re-enabled automatically if Kokoro recovers
+      if (d.tts && d.tts.kokoro === "loading") setTimeout(fetchStatus, 3000);
       var el = $("cfg-voice");
-      if (el) el.textContent = d.tts.kokoro === "ready" ? "Kokoro neural voice" : d.tts.kokoro === "loading" ? "Kokoro loading — system voice for now" : d.tts.elevenlabs ? "ElevenLabs" : "System voice (npm i kokoro-js for a neural voice)";
+      if (el) el.textContent = d.tts.kokoro === "ready" ? "Kokoro neural voice"
+        : d.tts.kokoro === "loading" ? "Kokoro " + (k.pct != null && k.pct < 100 ? "downloading model " + k.pct + "%" : "starting…") + " — system voice meanwhile"
+        : d.tts.elevenlabs ? "ElevenLabs"
+        : k.error && !/not installed|disabled/.test(k.error) ? "System voice — Kokoro failed: " + k.error
+        : "System voice (npm i kokoro-js for a neural voice)";
       chips();
     }).catch(function () {});
   }

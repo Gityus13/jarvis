@@ -2,15 +2,15 @@
 module.exports = [
   // INTEL
   { cat: "INTEL", cmd: "daily briefing", desc: "Time, weather, tasks, calendar, top headline" },
-  { cat: "INTEL", cmd: "weather in Baku", desc: "Conditions + 3-day forecast (any city)" },
+  { cat: "INTEL", cmd: "weather in London", desc: "Conditions + 3-day forecast (any city)" },
   { cat: "INTEL", cmd: "weather tomorrow", desc: "Tomorrow's forecast" },
   { cat: "INTEL", cmd: "news", desc: "World headlines (BBC)" },
   { cat: "INTEL", cmd: "tech news", desc: "Hacker News front page" },
   { cat: "INTEL", cmd: "bitcoin price", desc: "Live crypto prices" },
-  { cat: "INTEL", cmd: "convert 100 usd to azn", desc: "Currency conversion (live rates)" },
+  { cat: "INTEL", cmd: "convert 100 usd to eur", desc: "Currency conversion (live rates)" },
   { cat: "INTEL", cmd: "who is nikola tesla", desc: "Wikipedia summary" },
   { cat: "INTEL", cmd: "define ephemeral", desc: "Dictionary" },
-  { cat: "INTEL", cmd: "translate good morning to azerbaijani", desc: "Translate into 25 languages" },
+  { cat: "INTEL", cmd: "translate good morning to spanish", desc: "Translate into 25 languages" },
   { cat: "INTEL", cmd: "time in tokyo", desc: "Time in any city" },
   // TIME
   { cat: "TIME", cmd: "set a timer for 10 minutes", desc: "Countdown with spoken alert" },

@@ -11,7 +11,7 @@ const TOOLS = `ACTIONS — to DO something, start your reply with ONE JSON objec
 {"action":"run_shortcut","name":"..."}  {"action":"window_left","app":"Name"}  {"action":"window_right","app":"Name"}  {"action":"window_fullscreen","app":"Name"}
 {"action":"send_message","to":"Name","message":"..."}  {"action":"write_file","content_prompt":"...","filetype":"txt"}
 {"action":"skill","text":"<a command phrase>"}   ← use for ALL live data and utilities, e.g.
-   "weather in Baku", "tech news", "bitcoin price", "convert 100 usd to azn", "translate hello to turkish", "set a timer for 10 minutes",
+   "weather in London", "tech news", "bitcoin price", "convert 100 usd to eur", "translate hello to turkish", "set a timer for 10 minutes",
    "remind me in 20 minutes to call mom", "add task buy milk", "take a note: ...", "system status", "daily briefing", "who is nikola tesla"
 {"action":"none"}
 

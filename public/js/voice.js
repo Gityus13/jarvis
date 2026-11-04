@@ -97,28 +97,51 @@ window.Voice = (function () {
     speakServer(clean, id);
   }
 
-  function speakServer(clean, id) {
-    var ctrl = kCtrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, 20000);
-    fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean, personality: env.mode() }), signal: ctrl.signal })
+  // Long lines are split in two: the first sentence starts playing while the server is still
+  // generating the rest (neural TTS takes a few seconds per long line — silence feels broken).
+  function splitForTTS(text) {
+    if (text.length <= 110) return [text];
+    var m = text.slice(0, 170).match(/^(.{40,}?[.!?])\s+(?=\S)/);
+    var cut = m ? m[1].length : -1;
+    if (cut < 0) { var sp = text.lastIndexOf(" ", 120); cut = sp > 50 ? sp : -1; }
+    if (cut < 0 || text.length - cut < 25) return [text];
+    return [text.slice(0, cut).trim(), text.slice(cut).trim()];
+  }
+
+  function fetchAudio(text, signal) {
+    return fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text, personality: env.mode() }), signal: signal })
       .then(function (r) {
-        if (r.status === 501) serverTTSOff = true;
-        if (!r.ok) throw new Error("tts " + r.status);
+        if (r.status === 501) serverTTSOff = true;          // nothing available on this server → stop asking
+        if (!r.ok) throw new Error("tts " + r.status);      // 502/503 = this line only → system voice for it
         return r.blob();
-      })
-      .then(function (blob) {
-        clearTimeout(timer);
+      });
+  }
+
+  function speakServer(clean, id) {
+    var parts = splitForTTS(clean);
+    var ctrl = kCtrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 30000);
+    var reqs = parts.map(function (t) { return fetchAudio(t, ctrl.signal); });   // fired together; the server answers them in order
+    reqs.forEach(function (p) { p.catch(function () {}); });                      // failures are handled where each part is played
+
+    function play(i) {
+      reqs[i].then(function (blob) {
         if (id !== kReq) return;
+        if (i === 0) clearTimeout(timer);
         var url = URL.createObjectURL(blob);
         var a = kAudio = new Audio(url);
-        var done = function () { URL.revokeObjectURL(url); finishSpeech(id); };
-        a.onended = done;
-        a.onerror = function () { URL.revokeObjectURL(url); if (id === kReq) speakBrowser(clean, id); };
+        var next = function () { URL.revokeObjectURL(url); if (id !== kReq) return; if (i + 1 < parts.length) play(i + 1); else finishSpeech(id); };
+        a.onended = next;
+        a.onerror = function () { URL.revokeObjectURL(url); if (id === kReq) speakBrowser(parts.slice(i).join(" "), id); };
         clearTimeout(speakGuard);
-        speakGuard = setTimeout(done, 60000);
+        speakGuard = setTimeout(next, 60000);
         return a.play();
-      })
-      .catch(function () { clearTimeout(timer); if (id === kReq) speakBrowser(clean, id); });
+      }).catch(function () {
+        clearTimeout(timer);
+        if (id === kReq) speakBrowser(parts.slice(i).join(" "), id);   // anything wrong → the normal voice says the rest
+      });
+    }
+    play(0);
   }
 
   function pickVoice(p) {

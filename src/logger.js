@@ -1,7 +1,7 @@
 const path = require("path");
 const fs   = require("fs-extra");
 
-const LOG_FILE = path.join(__dirname, "../logs/jarvis.log");
+const LOG_FILE = path.join(require("./paths").LOGS, "jarvis.log");
 const MAX_SIZE = 5 * 1024 * 1024;
 
 fs.ensureDirSync(path.dirname(LOG_FILE));

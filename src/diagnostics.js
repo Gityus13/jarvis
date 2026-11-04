@@ -44,12 +44,14 @@ async function runAll(model) {
     return warn("intel", "Intel feeds", "No data", "Needs internet. Say: set my city to <your city>");
   });
 
-  const t = kokoro.status();
+  const k = kokoro.info();
+  const kd = k.pct != null && k.pct < 100 ? `downloading model ${k.pct}%${k.totalMB ? ` (${k.loadedMB}/${k.totalMB} MB)` : ""}` : "starting up";
   out.push(
-    t === "ready" ? ok("voice", "Voice engine", "Kokoro (local neural voice)")
+    k.state === "ready" ? ok("voice", "Voice engine", `Kokoro neural voice · first line in ${k.warmMs} ms`)
     : tts.elAvailable() ? ok("voice", "Voice engine", "ElevenLabs")
-    : t === "loading" ? warn("voice", "Voice engine", "Kokoro loading — using system voice meanwhile")
-    : warn("voice", "Voice engine", "System voice (browser)", "For a better voice: npm i kokoro-js, restart")
+    : k.state === "loading" ? warn("voice", "Voice engine", `Kokoro ${kd} — system voice until it's ready`, "First run only. Leave JARVIS running; progress is also printed in the terminal.")
+    : k.error && !/not installed|disabled/.test(k.error) ? warn("voice", "Voice engine", `Kokoro failed: ${k.error}`, k.hint)
+    : warn("voice", "Voice engine", "System voice (browser)", k.error && /disabled/.test(k.error) ? "Kokoro is off in .env" : "For a better voice: npm i kokoro-js, then restart")
   );
 
   if (mac.hasRobot()) out.push(ok("robot", "Keyboard / mouse control", "robotjs loaded"));
@@ -65,7 +67,7 @@ async function runAll(model) {
     });
   }
 
-  try { const f = path.join(__dirname, "..", "data"); fs.ensureDirSync(f); fs.accessSync(f, fs.constants.W_OK); out.push(ok("store", "Memory store", "writable")); }
+  try { const f = require("./paths").DATA; fs.ensureDirSync(f); fs.accessSync(f, fs.constants.W_OK); out.push(ok("store", "Memory store", "writable")); }
   catch { out.push(fail("store", "Memory store", "data/ is not writable", "Check folder permissions")); }
 
   return out.concat(await Promise.all(tasks));

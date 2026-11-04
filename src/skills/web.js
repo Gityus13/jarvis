@@ -32,7 +32,7 @@ async function home() {
   const city = store.db().settings.homeCity || process.env.HOME_CITY;
   if (city) return place(city);
   const ip = await http("https://ipwho.is/", { ttl: 36e5 });
-  if (ip.success === false) throw new Error("I couldn't work out where you are. Say: set my city to Baku.");
+  if (ip.success === false) throw new Error("I couldn't work out where you are. Say: set my city to London.");
   return { name: ip.city, country: ip.country, lat: ip.latitude, lon: ip.longitude, tz: ip.timezone && ip.timezone.id };
 }
 
@@ -179,7 +179,7 @@ async function currency({ amount = 1, from, to }) {
 
 /** Rows for the HUD markets panel */
 async function marketsData() {
-  const base = (process.env.HOME_CURRENCY || "AZN").toUpperCase();
+  const base = (process.env.HOME_CURRENCY || "USD").toUpperCase();
   const [c, R] = await Promise.allSettled([coinPrices(["bitcoin", "ethereum", "solana"]), rates()]);
   const rows = [];
   if (c.status === "fulfilled") {
@@ -189,8 +189,14 @@ async function marketsData() {
   }
   if (R.status === "fulfilled" && R.value[base]) {
     const r = R.value;
-    rows.push({ sym: `USD/${base}`, p: r[base].toFixed(3), ch: null });
-    if (r.EUR) rows.push({ sym: `EUR/${base}`, p: (r[base] / r.EUR).toFixed(3), ch: null });
+    if (base === "USD") {                                           // show how the dollar sits against the big ones
+      if (r.EUR) rows.push({ sym: "EUR/USD", p: (1 / r.EUR).toFixed(3), ch: null });
+      if (r.GBP) rows.push({ sym: "GBP/USD", p: (1 / r.GBP).toFixed(3), ch: null });
+    } else {
+      rows.push({ sym: `USD/${base}`, p: r[base].toFixed(3), ch: null });
+      const second = base === "EUR" ? "GBP" : "EUR";                // never show a currency against itself
+      if (r[second]) rows.push({ sym: `${second}/${base}`, p: (r[base] / r[second]).toFixed(3), ch: null });
+    }
   }
   if (!rows.length) throw new Error("offline");
   return rows;

@@ -2,7 +2,7 @@
 const fs   = require("fs-extra");
 const path = require("path");
 
-const FILE = path.join(__dirname, "..", "data", "jarvis-data.json");
+const FILE = path.join(require("./paths").DATA, "jarvis-data.json");
 let db = { tasks: [], notes: [], reminders: [], settings: {}, nextId: 1 };
 let timer = null;
 

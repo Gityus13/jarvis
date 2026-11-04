@@ -207,6 +207,19 @@ async function briefing(ctx) {
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
+/** → { skill, args } | null — which skill WOULD handle this phrase (runs nothing; used by tests) */
+function match(input) {
+  const raw = clean(input);
+  if (!raw) return null;
+  const t = lower(raw);
+  for (const sk of SKILLS) {
+    let args;
+    try { args = sk.match(t, raw); } catch { args = null; }
+    if (args) return { skill: sk.name, args };
+  }
+  return null;
+}
+
 /** → result | null. Errors become friendly results; "soft" skills fall through to the AI instead. */
 async function handle(input, ctx = {}) {
   const raw = clean(input);
@@ -227,4 +240,4 @@ async function handle(input, ctx = {}) {
   return null;
 }
 
-module.exports = { handle, SKILLS: SKILLS.map((s) => s.name), briefing, clean };
+module.exports = { handle, match, SKILLS: SKILLS.map((s) => s.name), briefing, clean };

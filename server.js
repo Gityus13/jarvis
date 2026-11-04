@@ -5,7 +5,7 @@ const WS       = require("ws");
 const path     = require("path");
 const fs       = require("fs-extra");
 const os       = require("os");
-const { v4: uuid } = require("uuid");
+const uuid = () => require("crypto").randomUUID();
 
 const { streamOllama, checkOllama } = require("./src/ollama");
 const { executeMacCommand }         = require("./src/mac-control");
@@ -49,8 +49,8 @@ const wss    = new WS.Server({
   verifyClient: ({ req }) => hostOk(req.headers.host) && originOk(req.headers.origin),
 });
 
-fs.ensureDirSync(path.join(__dirname, "data"));
-fs.ensureDirSync(path.join(__dirname, "logs"));
+fs.ensureDirSync(require("./src/paths").DATA);
+fs.ensureDirSync(require("./src/paths").LOGS);
 
 const plugins = loadPlugins(path.join(__dirname, "plugins"));
 
@@ -403,6 +403,7 @@ app.get("/api/status", async (_, res) => {
     tts: {
       elevenlabs: tts.elAvailable(),
       kokoro: kokoro.status(),
+      kokoroInfo: kokoro.info(),
       platform: process.platform,
       voices: tts.voiceNames(),
     },
@@ -451,8 +452,9 @@ app.post("/api/tts", async (req, res) => {
   }
 
   const st = kokoro.status();
-  if (st === "loading" || st === "idle") return res.status(503).json({ state: st });   // still loading → normal voice this time
-  return res.status(501).json({ state: st });                                          // nothing available → browser stops asking
+  if (st === "ready")                    return res.status(502).json({ state: st, error: "speech generation failed" });   // one-off failure: browser uses system voice for THIS line, keeps asking
+  if (st === "loading" || st === "idle") return res.status(503).json({ state: st });                                        // still loading → system voice this time
+  return res.status(501).json({ state: st });                                                                              // nothing available → browser stops asking
 });
 
 app.post("/api/command", async (req, res) => {
@@ -473,7 +475,7 @@ app.get("/api/plugins", (_, res) =>
   res.json(plugins.map(p => ({ name: p.name, description: p.description || "" }))));
 
 app.get("/api/logs", (_, res) => {
-  const f = path.join(__dirname, "logs/jarvis.log");
+  const f = path.join(require("./src/paths").LOGS, "jarvis.log");
   if (!fs.existsSync(f)) return res.json({ logs: [] });
   try { res.json({ logs: fs.readFileSync(f, "utf8").split("\n").filter(Boolean).slice(-100) }); }
   catch { res.json({ logs: [] }); }
