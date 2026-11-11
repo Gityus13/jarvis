@@ -1,11 +1,5 @@
 <div align="center">
-
-<a href="https://gityus13.dev" target="_blank">
-  <img src="https://gityus13.github.io/assets/gityus13.svg"
-       width="100%"
-       alt="GITYUS13"/>
-</a>
-
+  
 # J.A.R.V.I.S. — Tactical Intelligence Core
 
 **A private AI command console that runs on your own machine.**
@@ -266,3 +260,13 @@ Built on [Ollama](https://ollama.com), [Kokoro-82M](https://huggingface.co/hexgr
 *J.A.R.V.I.S.* is a fictional character from Marvel's Iron Man. This is an independent fan project and is not affiliated with or endorsed by Marvel or Disney.
 
 [MIT](LICENSE) © Gityus13
+
+---
+
+<div align="center">
+  <a href="https://gityus13.dev" target="_blank">
+    <img src="https://gityus13.github.io/assets/gityus13.svg"
+         width="100%"
+         alt="GITYUS13"/>
+  </a>
+</div>
