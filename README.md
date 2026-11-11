@@ -1,5 +1,11 @@
 <div align="center">
 
+<a href="https://gityus13.dev" target="_blank">
+  <img src="https://gityus13.github.io/assets/gityus13.svg"
+       width="100%"
+       alt="GITYUS13"/>
+</a>
+
 # J.A.R.V.I.S. — Tactical Intelligence Core
 
 **A private AI command console that runs on your own machine.**
