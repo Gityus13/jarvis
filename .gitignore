@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# local config & user data (never commit these)
+.env
+.env.*
+!.env.example
+data/
+logs/
+
+# misc
+*.log
+*.wav
+.DS_Store
+.vscode/
+.idea/
