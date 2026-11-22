@@ -144,7 +144,7 @@
         <div>
           <h3>Install Ollama</h3>
           <p>Bring the local language model that powers jarvis.</p>
-          <code>brew install ollama</code>
+          <div class="code-block">   <code>brew install ollama</code>   <button class="copy-btn" data-copy="brew install ollama">Copy</button> </div>
         </div>
       </article>
 
@@ -153,13 +153,14 @@
         <div>
           <h3>Launch jarvis</h3>
           <p>Use the macOS DMG or run the source locally. The setup script installs dependencies, creates your environment configuration, checks Ollama, and offers to download a model.</p>
-          <code>
-            git clone https://github.com/Gityus13/jarvis.git<br>
-            cd jarvis<br>
-            chmod +x setup.sh<br>
-            ./setup.sh<br>
-            npm start
-          </code>
+<div class="code-block">
+  <code>git clone https://github.com/Gityus13/jarvis.git
+cd jarvis
+chmod +x setup.sh
+./setup.sh
+npm start</code>
+  <button class="copy-btn" data-copy="git clone https://github.com/Gityus13/jarvis.git&#10;cd jarvis&#10;chmod +x setup.sh&#10;./setup.sh&#10;npm start">Copy</button>
+</div>
         </div>
       </article>
 
@@ -168,7 +169,7 @@
         <div>
           <h3>Customize your assistant</h3>
           <p>Before launching, edit <strong>.example.env</strong> to customize your assistant's name, Ollama model, and other configuration settings. The setup script copies this file to <strong>.env</strong>, so configure it before running setup.</p>
-          <code>nano .example.env</code>
+          <div class="code-block">   <code>nano .example.env</code>   <button class="copy-btn" data-copy="nano .example.env">Copy</button> </div>
         </div>
       </article>
 
