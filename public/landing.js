@@ -34,3 +34,29 @@
 
   gsap.to(".core-wrap", { y:-12, duration:2.8, repeat:-1, yoyo:true, ease:"sine.inOut" });
 })();
+
+
+document.querySelectorAll('.copy-btn').forEach(button => {
+  button.addEventListener('click', async () => {
+    const originalText = button.textContent;
+
+    try {
+      await navigator.clipboard.writeText(button.dataset.copy);
+
+      button.textContent = 'Copied!';
+      button.classList.add('copied');
+
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.classList.remove('copied');
+      }, 2000);
+
+    } catch (error) {
+      button.textContent = 'Failed';
+
+      setTimeout(() => {
+        button.textContent = originalText;
+      }, 2000);
+    }
+  });
+});
