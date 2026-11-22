@@ -130,39 +130,59 @@
       </div>
     </section>
 
-    <section class="install shell" id="install">
-      <div class="install-head">
-        <p class="eyebrow"><span></span> START IN MINUTES</p>
-        <h2>Install.<br><em>Speak. Build.</em></h2>
-      </div>
+    
+<section class="install shell" id="install">
+  <div class="install-head">
+    <p class="eyebrow"><span></span> START IN MINUTES</p>
+    <h2>Install.<br><em>Speak. Build.</em></h2>
+  </div>
 
-      <div class="install-grid">
-        <div class="steps">
-          <article class="step">
-            <span>01</span>
-            <div>
-              <h3>Install Ollama</h3>
-              <p>Bring the local language model that powers JARVIS.</p>
-              <code>brew install ollama &amp;&amp; ollama pull llama3.2</code>
-            </div>
-          </article>
-          <article class="step">
-            <span>02</span>
-            <div>
-              <h3>Launch JARVIS</h3>
-              <p>Use the macOS DMG or run the source locally.</p>
-              <code>git clone https://github.com/Gityus13/jarvis.git<br>cd jarvis &amp;&amp; npm install &amp;&amp; npm start</code>
-            </div>
-          </article>
-          <article class="step">
-            <span>03</span>
-            <div>
-              <h3>Give it an instruction</h3>
-              <p>Hold Space, or say “Hey Jarvis.”</p>
-              <code>“Give me my daily briefing”</code>
-            </div>
-          </article>
+  <div class="install-grid">
+    <div class="steps">
+      <article class="step">
+        <span>01</span>
+        <div>
+          <h3>Install Ollama</h3>
+          <p>Bring the local language model that powers JARVIIS.</p>
+          <code>brew install ollama</code>
         </div>
+      </article>
+
+      <article class="step">
+        <span>02</span>
+        <div>
+          <h3>Launch JARVIIS</h3>
+          <p>Use the macOS DMG or run the source locally. The setup script installs dependencies, creates your environment configuration, checks Ollama, and offers to download a model.</p>
+          <code>
+            git clone https://github.com/Gityus13/jarviis.git<br>
+            cd jarviis<br>
+            chmod +x setup.sh<br>
+            ./setup.sh<br>
+            npm start
+          </code>
+        </div>
+      </article>
+
+      <article class="step">
+        <span>03</span>
+        <div>
+          <h3>Customize your assistant</h3>
+          <p>Before launching, edit <strong>.example.env</strong> to customize your assistant's name, Ollama model, and other configuration settings. The setup script copies this file to <strong>.env</strong>, so configure it before running setup.</p>
+          <code>nano .example.env</code>
+        </div>
+      </article>
+
+      <article class="step">
+        <span>04</span>
+        <div>
+          <h3>Give it an instruction</h3>
+          <p>Hold Space, or say “Hey Jarviis.”</p>
+          <code>“Give me my daily briefing”</code>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
 
         <div class="terminal">
           <div class="terminal-bar">
