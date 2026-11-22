@@ -1,0 +1,42 @@
+/* GitHub Pages presentation layer */
+html[data-static="true"] #chip-ai,
+html[data-static="true"] #chip-net,
+html[data-static="true"] #chip-voice,
+html[data-static="true"] #chip-mic {
+  transition: filter .25s ease, opacity .25s ease;
+}
+
+html[data-static="true"] #chip-net,
+html[data-static="true"] #chip-voice {
+  cursor: default;
+}
+
+html[data-static="true"] #stage {
+  isolation: isolate;
+}
+
+html[data-static="true"] #stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(transparent 49%, rgba(var(--acc-rgb), .025) 50%, transparent 51%) 0 0 / 100% 8px,
+    radial-gradient(circle at 50% 50%, rgba(var(--acc-rgb), .08), transparent 35%);
+  pointer-events: none;
+}
+
+html[data-static="true"] .panel {
+  overflow: hidden;
+  will-change: transform, opacity;
+}
+
+html[data-static="true"] #core {
+  filter: saturate(1.12) contrast(1.04);
+}
+
+@media (max-width: 1020px) {
+  html[data-static="true"] #stage {
+    flex-basis: 70vh;
+  }
+}
