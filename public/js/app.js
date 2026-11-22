@@ -4,6 +4,8 @@
 (function () {
   "use strict";
 
+  var STATIC_DEMO = location.hostname.endsWith(".github.io") || location.hostname === "gityus13.dev";
+
   var $ = function (id) { return document.getElementById(id); };
   function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
   function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -120,6 +122,11 @@
   }
 
   function connect() {
+    if (STATIC_DEMO) {
+      S.connected = false;
+      chips();
+      return;
+    }
     if (S.ws && S.ws.readyState <= 1) return;                 // already connected / connecting
     clearTimeout(S.reconTimer);
     var proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -215,6 +222,21 @@
     text = String(text || "").trim();
     if (!text) return;
     Voice.stop(); Voice.cancel();
+    if (STATIC_DEMO) {
+      if (S.hist[S.hist.length - 1] !== text) S.hist.push(text);
+      S.histIdx = -1;
+      addLine("usr", "YOU", text);
+      var lower = text.toLowerCase();
+      var reply = /weather/.test(lower) ? "Weather systems are nominal. This static demo can display live telemetry and interface effects, while live weather and local controls require the desktop application."
+        : /system|status|diagnostic/.test(lower) ? "All public demo systems are nominal. Launch the local Jarvis application to connect live hardware telemetry and AI services."
+        : /hello|hey|hi/.test(lower) ? "Hello. The tactical console is online and ready for demonstration."
+        : /task|timer|note/.test(lower) ? "That command is fully available in the desktop application. For this GitHub Pages preview, interface interactions remain local and simulated."
+        : "Command received. This is the public interface preview; connect Jarvis.app to run local AI and system-control actions.";
+      addLine("ai", aiLabel(), reply);
+      $("input").value = ""; $("stage-text").textContent = "";
+      sfx.send(); Core.pulse();
+      return;
+    }
     if (!S.connected) { toast("Not connected to the core — retrying…", "error"); Voice.kick(1500); return; }
     if (S.hist[S.hist.length - 1] !== text) S.hist.push(text);
     S.histIdx = -1;
@@ -228,7 +250,7 @@
     var nav = $("modes"); nav.innerHTML = "";
     keys.forEach(function (k) {
       var b = h("button", null, k); b.dataset.k = k;
-      b.addEventListener("click", function () { if (k !== S.mode) wsSend({ type: "set_personality", personality: k }); });
+      b.addEventListener("click", function () { if (k !== S.mode) { if (STATIC_DEMO) applyMode(k); else wsSend({ type: "set_personality", personality: k }); } });
       nav.appendChild(b);
     });
   }
@@ -475,6 +497,12 @@
     }).catch(function () { return null; });
   }
   function gatherDiag() {
+    if (STATIC_DEMO) return Promise.resolve([
+      { label: "GitHub Pages", status: "ok", detail: "static interface online" },
+      { label: "Browser interface", status: "ok", detail: "GSAP and animated core ready" },
+      { label: "Local AI core", status: "warn", detail: "requires Jarvis.app", fix: "Launch Jarvis.app or npm start on your computer" },
+      { label: "System telemetry", status: "warn", detail: "browser demo uses simulated data", fix: "Run the local desktop application for live metrics" }
+    ].concat(clientChecks()));
     return Promise.all([
       fetch("/api/diagnostics").then(function (r) { return r.json(); }).catch(function () { return [{ label: "Core server", status: "fail", detail: "no answer", fix: "Restart Jarvis.app" }]; }),
       micPermission(),
@@ -572,6 +600,38 @@
   function init() {
     feed = $("feed");
     Core.init($("core"));
+
+    if (STATIC_DEMO) {
+      S.profiles = {
+        JARVIS: { name: "J.A.R.V.I.S.", tag: "TACTICAL INTELLIGENCE CORE" },
+        FRIDAY: { name: "F.R.I.D.A.Y.", tag: "DIRECT OPERATIONS CORE" },
+        ULTRON: { name: "U.L.T.R.O.N.", tag: "COLD ANALYTICAL CORE" }
+      };
+      S.greeting = "All systems nominal. Welcome to the tactical intelligence console.";
+      buildModes(["JARVIS", "FRIDAY", "ULTRON"]);
+      applyMode("JARVIS");
+      S.data = {
+        tasks: [{ id: "t1", text: "Review project mission brief", done: false }, { id: "t2", text: "Prepare system diagnostics", done: true }],
+        notes: [{ id: "n1", text: "All systems ready" }],
+        reminders: [{ id: "r1", label: "Mission review", kind: "timer", at: Date.now() + 18 * 60 * 1000 }]
+      };
+      renderTele({
+        cpu: 38, mem: { used: 8.4 * 1073741824, total: 16 * 1073741824, pct: 52, hist: [28,31,36,33,41,39,44,38,46,43,40,38] },
+        disk: { pct: 61, total: 512 * 1073741824, used: 312 * 1073741824 },
+        battery: { pct: 88, state: "charged" }, net: { ok: true, ms: 24 },
+        cpuHist: [26,31,29,37,34,42,39,44,35,41,38,38], procs: [{ name: "system-core", cpu: 12.4 }, { name: "intelligence", cpu: 8.7 }, { name: "browser", cpu: 6.1 }],
+        host: "Pages Console", platform: "GitHub Pages", cores: 8, uptime: 86400, load: ["1.2", "1.0", "0.9"], node: "Browser"
+      });
+      renderIntel({
+        weather: { ok: true, data: { place: "Central Hub", country: "SYSTEM", unit: "C", now: { t: 22, feels: 21, hum: 48, wind: 12, text: "Clear" }, days: [{ d: "Today", hi: 24, lo: 18, rain: 10 }, { d: "Tomorrow", hi: 23, lo: 17, rain: 20 }, { d: "Friday", hi: 25, lo: 19, rain: 5 }] } },
+        markets: { ok: true, data: [{ sym: "BTC", p: "$67,842", ch: 2.41 }, { sym: "ETH", p: "$3,512", ch: -0.83 }, { sym: "EUR/USD", p: "1.0842", ch: 0.12 }] },
+        news: { ok: true, data: [{ t: "JARVIS interface systems operational", m: "SYSTEM", u: "#" }, { t: "GitHub Pages deployment active", m: "NETWORK", u: "#" }] },
+        tech: { ok: true, data: [{ t: "GSAP-powered interface effects online", m: "UI", u: "#" }, { t: "Canvas core telemetry ready", m: "CORE", u: "#" }] }
+      });
+      setTimeout(function () {
+        if (!S.greeted) { S.greeted = true; addLine("ai", aiLabel(), S.greeting); }
+      }, 1200);
+    }
 
     Voice.init({
       mode: function () { return S.mode; },
