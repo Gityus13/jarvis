@@ -4,7 +4,7 @@ Thanks for helping make JARVIS better!
 
 ## Setup
 ```bash
-git clone https://github.com/Gityus13/jarvis.git && cd jarvis
+git clone https://github.com/Gityus13/jarviis.git && cd jarviis
 npm install
 npm test            # 140+ tests, no internet / Ollama / microphone needed
 npm run doctor      # checks your own install

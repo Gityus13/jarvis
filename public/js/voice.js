@@ -18,6 +18,7 @@ window.Voice = (function () {
   var UA = navigator.userAgent || "";
   var IS_CHROMIUM = /Chrome|Chromium|Edg\//.test(UA);
   var IS_SAFARI = /Safari/.test(UA) && !IS_CHROMIUM;
+  var IS_ELECTRON = /Electron/.test(UA);
   var tabActive = function () { return !document.hidden; };
 
   function setPhase(p) { phase = p; env && env.ui && env.ui.phase && env.ui.phase(p); }
@@ -209,18 +210,37 @@ window.Voice = (function () {
   }
 
   // ═══════════════════════════════ MIC LEVEL ═══════════════════════════════
-  var meter = { ctx: null, an: null, buf: null, started: false, lv: 0 };
+  var meter = { ctx: null, an: null, buf: null, stream: null, started: false, lv: 0 };
   function ensureMeter() {
-    if (meter.started || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    if (meter.started && meter.stream) return Promise.resolve(true);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(false);
     meter.started = true;
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+      meter.stream = stream;
+      meter.started = true;
       var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
       meter.ctx = new AC();
       var src = meter.ctx.createMediaStreamSource(stream);
       meter.an = meter.ctx.createAnalyser(); meter.an.fftSize = 512;
       src.connect(meter.an);
       meter.buf = new Uint8Array(meter.an.fftSize);
-    }).catch(function () { /* mic permission handled by speech recognition itself */ });
+      worked();
+      return true;
+    }).catch(function (e) {
+      meter.started = false;
+      meter.stream = null;
+      if (e && (e.name === "NotAllowedError" || e.name === "PermissionDeniedError")) {
+        micBlocked = true;
+        toast("Microphone blocked — allow Microphone for Jarvis in macOS Privacy & Security, then retry", "error");
+        cancelListening();
+      } else if (e && e.name === "NotFoundError") {
+        micBlocked = true;
+        toast("No microphone found — connect or enable an input device", "error");
+        cancelListening();
+      }
+      return false;
+    });
   }
   function resumeMeter() { try { if (meter.ctx && meter.ctx.state === "suspended") meter.ctx.resume(); } catch (e) {} }
   function micLevel() {
@@ -244,6 +264,7 @@ window.Voice = (function () {
   var gen = 0;
   var wakeRec = null, cmdRec = null, manRec = null;
   var _wakeTimer = null, _silTimer = null, _idleTimer = null, _settleTimer = null, _manTimer = null;
+  var nativeAvailable = false, nativeTimer = null, nativeStarting = false;
   var cmdFinal = "", cmdInterim = "", manFinal = "", manInterim = "", manStopping = false, netFails = 0;
 
   var WAKE = {
@@ -318,9 +339,11 @@ window.Voice = (function () {
   // The user clicked the MIC indicator / mic button: verify the permission, then try again.
   function retryMic() {
     if (!env) return;
-    checkPermission().then(function (state) {
+    ensureMeter().finally(function () {
+      checkPermission().then(function (state) {
       if (state === "denied") { toast("Still blocked — click the lock icon in the address bar, allow the microphone, then try again", "error"); return; }
       micBlocked = false; denyCount = 0; env.ui.listening(false); setPhase("idle"); hint("RETRYING MICROPHONE"); scheduleWake(200);
+      });
     });
   }
 
@@ -348,7 +371,21 @@ window.Voice = (function () {
     return false;
   }
 
-  function canRun() { return SR && wakeOn && env.connected() && !micBlocked && tabActive(); }
+  function nativeStatus() {
+    if (!window.fetch) return Promise.resolve({ available: false });
+    return fetch("/api/dictation/status").then(function (r) { return r.json(); }).catch(function () { return { available: false }; });
+  }
+
+  function startNative() {
+    return fetch("/api/dictation/start", { method: "POST" }).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; });
+  }
+
+  function stopNative() {
+    clearTimeout(nativeTimer);
+    return fetch("/api/dictation/stop", { method: "POST" }).then(function (r) { return r.json(); }).catch(function () { return {}; });
+  }
+
+  function canRun() { return (SR || nativeAvailable) && wakeOn && env.connected() && !micBlocked && tabActive(); }
 
   function scheduleWake(delay) {
     if (!canRun()) return;
@@ -363,6 +400,46 @@ window.Voice = (function () {
     if (phase === "command" || phase === "manual" || phase === "activating") return;
     if (env.busy()) { scheduleWake(800); return; }
     stopAllRec();
+    if (IS_ELECTRON && nativeAvailable) {
+      setPhase("wakeword");
+      hint('SAY "HEY ' + env.mode() + '"');
+      nativeStarting = true;
+      startNative().then(function (started) {
+        nativeStarting = false;
+        if (!started.ok) {
+          micBlocked = true;
+          toast(started.reason || "Native dictation could not start", "error");
+          cancelListening();
+          return;
+        }
+        var g = gen;
+        var poll = function () {
+          if (g !== gen || phase !== "wakeword") return;
+          nativeStatus().then(function (status) {
+            if (status.error) {
+              micBlocked = true;
+              toast(status.error, "error");
+              cancelListening();
+              return;
+            }
+            var text = ((status.text || "") + " " + (status.interim || "")).trim();
+            if (text) {
+              env.ui.heard(text);
+              var hit = findWake(text);
+              if (hit) {
+                stopNative();
+                wakeDetected(hit.personality, text.slice(hit.end).replace(/^[\s,.:;!?-]+/, "").trim());
+                return;
+              }
+            }
+            if (!status.running) { scheduleWake(250); return; }
+            nativeTimer = setTimeout(poll, 300);
+          });
+        };
+        nativeTimer = setTimeout(poll, 300);
+      });
+      return;
+    }
     setPhase("wakeword");
     hint('SAY "HEY ' + env.mode() + '"');
 
@@ -408,8 +485,42 @@ window.Voice = (function () {
   }
 
   function startCommand() {
-    if (!SR || !env.connected()) return;
+    if ((!SR && !nativeAvailable) || !env.connected()) return;
     stopAllRec();
+    if (IS_ELECTRON && nativeAvailable) {
+      setPhase("command");
+      cmdFinal = ""; cmdInterim = "";
+      var g = gen;
+      env.ui.listening(true); hint("SPEAK NOW");
+      startNative().then(function (started) {
+        if (!started.ok) {
+          micBlocked = true;
+          toast(started.reason || "Native dictation could not start", "error");
+          cancelListening();
+          return;
+        }
+        var poll = function () {
+          if (g !== gen || phase !== "command") return;
+          nativeStatus().then(function (status) {
+            if (status.error) {
+              micBlocked = true;
+              toast(status.error, "error");
+              cancelListening();
+              return;
+            }
+            cmdFinal = status.text || "";
+            cmdInterim = status.interim || "";
+            env.ui.interim((cmdFinal + " " + cmdInterim).trim());
+            if (status.running) nativeTimer = setTimeout(poll, 250);
+            else finishCommandNative();
+          });
+        };
+        nativeTimer = setTimeout(poll, 250);
+      });
+      clearTimeout(_idleTimer);
+      _idleTimer = setTimeout(function () { if (g === gen) finishCommandNative(); }, 12000);
+      return;
+    }
     setPhase("command");
     cmdFinal = ""; cmdInterim = "";
     var g = gen, heard = false;
@@ -444,11 +555,57 @@ window.Voice = (function () {
     stopAllRec(); setPhase("idle"); env.ui.listening(false); env.ui.fill(t);     // review first, Enter to send
   }
 
+  function finishCommandNative() {
+    clearTimeout(nativeTimer); clearTimeout(_idleTimer);
+    if (phase !== "command") return;
+    stopNative().then(function (status) {
+      var t = ((status && status.text) || cmdFinal || "").trim();
+      if (!t) t = (cmdInterim || "").trim();
+      stopAllRec();
+      setPhase("idle");
+      env.ui.listening(false);
+      if (!t) { scheduleWake(400); return; }
+      if (autoSend) env.send(t);
+      else env.ui.fill(t);
+    });
+  }
+
   function startManual() {
-    if (!SR) { toast("Speech recognition unavailable — use Chrome", "error"); return; }
+    if (!SR && !nativeAvailable) { toast("Speech recognition unavailable — enable macOS Dictation", "error"); return; }
     if (micBlocked) { retryMic(); return; }                    // verifies the permission, then retries (no reload needed)
     if (env.busy() || phase === "manual") return;
     stopSpeech(); stopAllRec();
+    if (IS_ELECTRON && nativeAvailable) {
+      setPhase("manual");
+      manFinal = manInterim = ""; manStopping = false;
+      var g = gen;
+      env.ui.listening(true); hint("HOLD AND SPEAK");
+      startNative().then(function (started) {
+        if (!started.ok) {
+          micBlocked = true;
+          toast(started.reason || "Native dictation could not start", "error");
+          cancelListening();
+          return;
+        }
+        var poll = function () {
+          if (g !== gen || phase !== "manual") return;
+          nativeStatus().then(function (status) {
+            if (status.error) {
+              micBlocked = true;
+              toast(status.error, "error");
+              cancelListening();
+              return;
+            }
+            manFinal = status.text || "";
+            manInterim = status.interim || "";
+            env.ui.interim((manFinal + " " + manInterim).trim());
+            if (status.running) nativeTimer = setTimeout(poll, 250);
+          });
+        };
+        nativeTimer = setTimeout(poll, 250);
+      });
+      return;
+    }
     setPhase("manual");
     manFinal = manInterim = ""; manStopping = false;
     var g = gen, rec = manRec = newRec(true, 1);
@@ -470,6 +627,14 @@ window.Voice = (function () {
   function stopManual() {
     if (phase !== "manual" || manStopping) return;
     manStopping = true; hint("PROCESSING");
+    if (IS_ELECTRON && nativeAvailable) {
+      clearTimeout(nativeTimer);
+      stopNative().then(function (status) {
+        if (status && status.text) manFinal = status.text;
+        finishManual();
+      });
+      return;
+    }
     try { if (manRec) manRec.stop(); } catch (e) {}
     clearTimeout(_manTimer);
     _manTimer = setTimeout(finishManual, 1500);         // wait for Chrome's final words, but never forever
@@ -485,6 +650,8 @@ window.Voice = (function () {
 
   function stopAllRec() {
     gen++;
+    clearTimeout(nativeTimer);
+    if (IS_ELECTRON && nativeAvailable) stopNative();
     clearTimeout(_wakeTimer); clearTimeout(_silTimer); clearTimeout(_idleTimer); clearTimeout(_settleTimer); clearTimeout(_manTimer);
     [wakeRec, cmdRec, manRec].forEach(function (r) {
       if (!r) return;
@@ -522,11 +689,20 @@ window.Voice = (function () {
   }, 4000);
 
   return {
-    init: function (e) { env = e; },
+    init: function (e) {
+      env = e;
+      nativeStatus().then(function (status) {
+        nativeAvailable = !!status.available;
+        if (nativeAvailable) env.ui.listening(false);
+      });
+      if (SR && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        ensureMeter();
+      }
+    },
     speak: speak, stop: stopSpeech,
     isSpeaking: function () { return speaking; },
     phase: function () { return phase; },
-    supported: function () { return !!SR; },
+    supported: function () { return !!SR || nativeAvailable; },
     micBlocked: function () { return micBlocked; },
     setWake: function (on) { wakeOn = !!on; if (!wakeOn) { if (phase === "wakeword" || phase === "activating") cancelListening(); } else scheduleWake(300); },
     setAutoSend: function (on) { autoSend = !!on; },
@@ -535,7 +711,14 @@ window.Voice = (function () {
     kick: scheduleWake, cancel: cancelListening,
     unlock: function () { unlockAudio(); if (IS_CHROMIUM) ensureMeter(); resumeMeter(); },
     retryMic: retryMic,
+    retryMicrophone: retryMic,
     isUnlocked: function () { return unlocked; },
     level: level,
   };
 })();
+
+window.JarvisVoice = {
+  retryMicrophone: function () {
+    window.Voice.retryMic();
+  },
+};

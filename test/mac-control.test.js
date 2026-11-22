@@ -2,7 +2,14 @@ require("./helpers/env");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const os = require("os");
-const { _internal: m } = require("../src/mac-control");
+const mac = require("../src/mac-control");
+const m = mac._internal;
+
+test("AI system aliases normalize to real clipboard/battery actions", () => {
+  assert.deepEqual(mac.normalizeMacAction({ action: "system", command: "get_clipboard" }), { action: "get_clipboard", text: undefined });
+  assert.deepEqual(mac.normalizeMacAction({ action: "system", command: "get_battery" }), { action: "get_battery", text: undefined });
+  assert.equal(mac.normalizeMacAction({ action: "open_app", app: "Safari" }).action, "open_app");
+});
 
 test("key combos", () => {
   const mod = process.platform === "darwin" ? "command" : "control";

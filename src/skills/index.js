@@ -23,6 +23,24 @@ const TOPICS = { tech: "tech", technology: "tech", hacker: "tech", programming: 
 
 // ── The skill table (order matters: specific → general) ───────────────────────
 const SKILLS = [
+  { name: "conversation",
+    match: (t) => {
+      if (/^(?:hi|hello|hey)(?: there)?$/.test(t)) return { kind: "hello" };
+      if (/^(?:how(?:'s| is) you|how are you|how(?:'s| is) it going|how do you do|are you well)$/.test(t)) return { kind: "how" };
+      if (/^(?:thanks|thank you|cheers)$/.test(t)) return { kind: "thanks" };
+      if (/^(?:who are you|what are you|what is your name)$/.test(t)) return { kind: "who" };
+      return null;
+    },
+    run: (a) => {
+      const replies = {
+        hello: "Hello.",
+        how: "I am operational and ready.",
+        thanks: "You're welcome.",
+        who: "I am Jarvis, your local tactical assistant.",
+      };
+      return { say: replies[a.kind] || "Hello." };
+    } },
+
   { name: "briefing",
     match: (t) => /^(?:daily |morning |evening |full )?(?:brief(?:ing)?|brief me|status report|sitrep|catch me up|what did i miss|what's going on|whats going on)$/.test(t) || /^good (?:morning|afternoon|evening)(?: .*)?$/.test(t) ? {} : null,
     run: (a, ctx) => briefing(ctx) },

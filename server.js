@@ -8,7 +8,7 @@ const os       = require("os");
 const uuid = () => require("crypto").randomUUID();
 
 const { streamOllama, checkOllama } = require("./src/ollama");
-const { executeMacCommand }         = require("./src/mac-control");
+const { executeMacCommand, normalizeMacAction } = require("./src/mac-control");
 const tts                           = require("./src/tts");
 const kokoro                        = require("./src/kokoro");
 const { routeCommand }              = require("./src/command-router");
@@ -23,6 +23,7 @@ const telemetry    = require("./src/telemetry");
 const diagnostics  = require("./src/diagnostics");
 const catalog      = require("./src/catalog");
 const store        = require("./src/store");
+const nativeDictation = require("./src/native-dictation");
 
 const PORT  = process.env.PORT || 3000;
 const HOST  = process.env.HOST || "127.0.0.1";   // localhost only by default (this thing controls your Mac!)
@@ -49,10 +50,14 @@ const wss    = new WS.Server({
   verifyClient: ({ req }) => hostOk(req.headers.host) && originOk(req.headers.origin),
 });
 
-fs.ensureDirSync(require("./src/paths").DATA);
-fs.ensureDirSync(require("./src/paths").LOGS);
+const paths = require("./src/paths");
+fs.ensureDirSync(paths.DATA);
+fs.ensureDirSync(paths.LOGS);
 
-const plugins = loadPlugins(path.join(__dirname, "plugins"));
+const plugins = loadPlugins(
+  [paths.BUNDLED_PLUGINS, paths.USER_PLUGINS],
+  { ensureDirs: paths.USER_PLUGINS === paths.BUNDLED_PLUGINS ? [] : [paths.USER_PLUGINS] },
+);
 
 // Kokoro voice (optional) — loads in the background, safe if not installed
 kokoro.load().then(() => {
@@ -73,6 +78,18 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/api/dictation/status", (_, res) => {
+  res.json({ available: nativeDictation.available(), ...nativeDictation.status() });
+});
+app.post("/api/dictation/start", (_, res) => {
+  Promise.resolve(nativeDictation.start()).then((result) => res.json(result)).catch((error) => {
+    res.status(500).json({ ok: false, reason: error.message });
+  });
+});
+app.post("/api/dictation/stop", (_, res) => {
+  res.json(nativeDictation.stop());
+});
 
 // One bad action must never take the whole server down
 process.on("unhandledRejection", e => logger.error("Unhandled rejection: " + (e?.stack || e)));
@@ -207,12 +224,13 @@ async function handleText(ws, sess, sid, text) {
   // (it used to ALSO ask the AI, which ran the same action a second time)
   const direct = routeCommand(text);
   if (direct) {
-    safe(ws, { type: "action_start", action: direct });
+    const normalizedDirect = normalizeMacAction(direct);
+    safe(ws, { type: "action_start", action: normalizedDirect });
     let line;
     try {
-      const r = await executeMacCommand(direct);
-      safe(ws, { type: "action_done", action: direct, result: r || "Done" });
-      line = isInfo(direct.action) && r ? String(r) : (r && /denied|install/i.test(String(r)) ? String(r) : ack(sess.personality));
+      const r = await executeMacCommand(normalizedDirect);
+      safe(ws, { type: "action_done", action: normalizedDirect, result: r || "Done" });
+      line = isInfo(normalizedDirect.action) && r ? String(r) : (r && /denied|install/i.test(String(r)) ? String(r) : ack(sess.personality));
     } catch (e) {
       safe(ws, { type: "action_error", error: e.message });
       line = `I couldn't do that. ${friendly(e)}`;
@@ -294,12 +312,13 @@ async function handleText(ws, sess, sid, text) {
       if (r) sendResult(ws, sess, r);
       else safe(ws, { type: "jarvis_response", text: "I couldn't do that one." });
     } else if (action && action.action && action.action !== "none") {
-      safe(ws, { type: "action_start", action });
+      const normalizedAction = normalizeMacAction(action);
+      safe(ws, { type: "action_start", action: normalizedAction });
       try {
-        const r = await executeMacCommand(action);
-        safe(ws, { type: "action_done", action, result: r || "Done" });
+        const r = await executeMacCommand(normalizedAction);
+        safe(ws, { type: "action_done", action: normalizedAction, result: r || "Done" });
         // The AI can't see action results — so read the answer out for "what's my battery"-type actions
-        if (isInfo(action.action) && r) safe(ws, { type: "jarvis_response", text: String(r) });
+        if (isInfo(normalizedAction.action) && r) safe(ws, { type: "jarvis_response", text: String(r) });
       } catch (e) {
         safe(ws, { type: "action_error", error: e.message });
         safe(ws, { type: "jarvis_response", text: `That didn't work. ${friendly(e)}` });

@@ -132,7 +132,7 @@ test("timers fire a spoken alert and can be cancelled from the UI", async () => 
 
 test("AI path: UTF-8 survives streaming, and the AI can delegate to a skill", async () => {
   const c = await connect(); await sleep(200);
-  let l = await say(c, "hello", 900);
+  let l = await say(c, "tell me something interesting", 900);
   assert.equal(l.filter((m) => m.type === "stream_chunk").map((m) => m.text).join(""), "Hello there, sir. Əla gün!");
   l = await say(c, "please delegate this", 1200);
   assert.ok(types(l).includes("stream_end"));

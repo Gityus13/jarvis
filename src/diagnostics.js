@@ -63,7 +63,7 @@ async function runAll(model) {
       const acc = await mac.checkAccessibility();
       return acc ? ok("access", "Accessibility permission", "granted")
         : fail("access", "Accessibility permission", "Not granted — typing, key presses and clicks will silently do nothing",
-               "System Settings → Privacy & Security → Accessibility → add Terminal (or iTerm / VS Code), whichever runs node");
+               "System Settings → Privacy & Security → Accessibility → add Jarvis.app (or its Jarvis executable), then restart Jarvis");
     });
   }
 

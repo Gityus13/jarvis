@@ -455,7 +455,12 @@
       ? { label: "Browser", status: "warn", detail: "Safari — voice input and audio autoplay are stricter here", fix: "For the most reliable voice use Chrome or Edge. In Safari: allow the microphone for this site and turn on Dictation (System Settings → Keyboard)." }
       : chromium ? { label: "Browser", status: "ok", detail: "Chromium-based" }
       : { label: "Browser", status: "warn", detail: "Unrecognised browser", fix: "Use Chrome or Edge for voice input" });
-    out.push(window.SpeechRecognition || window.webkitSpeechRecognition ? { label: "Speech recognition (browser)", status: "ok", detail: "available" } : { label: "Speech recognition (browser)", status: "fail", detail: "Not supported in this browser", fix: "Open JARVIS in Google Chrome or Microsoft Edge" });
+    var electron = /Electron/.test(navigator.userAgent);
+    out.push(electron
+      ? { label: "Speech recognition", status: "ok", detail: "Native macOS dictation" }
+      : window.SpeechRecognition || window.webkitSpeechRecognition
+        ? { label: "Speech recognition (browser)", status: "ok", detail: "available" }
+        : { label: "Speech recognition (browser)", status: "fail", detail: "Not supported in this browser", fix: "Open Jarvis.app or Chrome" });
     out.push(window.isSecureContext ? { label: "Secure context", status: "ok", detail: location.origin } : { label: "Secure context", status: "fail", detail: "The mic only works on localhost or https", fix: "Open http://localhost:" + location.port });
     out.push(S.connected ? { label: "Console link (WebSocket)", status: "ok", detail: "connected" } : { label: "Console link (WebSocket)", status: "fail", detail: "disconnected", fix: "Is the server running? npm start" });
     out.push(window.speechSynthesis ? { label: "Speech output (browser)", status: "ok", detail: (speechSynthesis.getVoices().length || "?") + " system voices" } : { label: "Speech output (browser)", status: "warn", detail: "not available" });
@@ -465,14 +470,24 @@
     if (!navigator.permissions || !navigator.permissions.query) return Promise.resolve(null);
     return navigator.permissions.query({ name: "microphone" }).then(function (p) {
       return p.state === "granted" ? { label: "Microphone permission", status: "ok", detail: "granted" }
-        : p.state === "prompt" ? { label: "Microphone permission", status: "warn", detail: "not asked yet — Chrome will prompt on first use", fix: "Click the mic button once and press Allow" }
-        : { label: "Microphone permission", status: "fail", detail: "blocked", fix: "Click the lock icon in the address bar → Microphone → Allow, then reload" };
+        : p.state === "prompt" ? { label: "Microphone permission", status: "warn", detail: "not asked yet — macOS will prompt", fix: "Use Mac Control → Enable Microphone or click the MIC chip" }
+        : { label: "Microphone permission", status: "fail", detail: "blocked", fix: "System Settings → Privacy & Security → Microphone → add Jarvis.app" };
     }).catch(function () { return null; });
   }
   function gatherDiag() {
-    return Promise.all([fetch("/api/diagnostics").then(function (r) { return r.json(); }).catch(function () { return [{ label: "Core server", status: "fail", detail: "no answer", fix: "Run: npm start" }]; }), micPermission()]).then(function (a) {
+    return Promise.all([
+      fetch("/api/diagnostics").then(function (r) { return r.json(); }).catch(function () { return [{ label: "Core server", status: "fail", detail: "no answer", fix: "Restart Jarvis.app" }]; }),
+      micPermission(),
+      fetch("/api/dictation/status").then(function (r) { return r.json(); }).catch(function () { return { available: false }; }),
+    ]).then(function (a) {
       var list = a[0]; if (!Array.isArray(list)) list = [];
-      var cc = clientChecks(); if (a[1]) cc.splice(2, 0, a[1]);
+      var cc = clientChecks();
+      if (a[1]) cc.splice(2, 0, a[1]);
+      if (/Electron/.test(navigator.userAgent)) {
+        cc.push(a[2].available
+          ? { label: "Native on-device dictation", status: "ok", detail: "Apple Speech framework" }
+          : { label: "Native on-device dictation", status: "fail", detail: "Helper unavailable", fix: "Use v4.0.7 or later macOS ARM64 DMG" });
+      }
       return list.concat(cc);
     });
   }

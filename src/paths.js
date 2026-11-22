@@ -5,4 +5,6 @@ module.exports = {
   ROOT,
   DATA: process.env.JARVIS_DATA_DIR || path.join(ROOT, "data"),
   LOGS: process.env.JARVIS_LOG_DIR  || path.join(ROOT, "logs"),
+  BUNDLED_PLUGINS: process.env.JARVIS_BUNDLED_PLUGINS || path.join(ROOT, "plugins"),
+  USER_PLUGINS: process.env.JARVIS_PLUGIN_DIR || path.join(ROOT, "plugins"),
 };

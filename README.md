@@ -6,7 +6,7 @@
 Local LLM · voice in and out · live intel · real system telemetry · full Mac control.
 No cloud accounts. No API keys.
 
-[![CI](https://github.com/Gityus13/jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/Gityus13/jarvis/actions/workflows/ci.yml)
+[![CI](https://github.com/Gityus13/jarviis/actions/workflows/ci.yml/badge.svg)](https://github.com/Gityus13/jarviis/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/macOS-full-black) ![Platform](https://img.shields.io/badge/Linux%20%7C%20Windows-core-lightgrey)
@@ -32,9 +32,63 @@ No cloud accounts. No API keys.
 
 ## Quick start
 
+### macOS desktop app
+
+Download the latest **Jarvis-*.dmg** from
+[GitHub Releases](https://github.com/Gityus13/jarviis/releases), open it, drag
+**Jarvis.app** to Applications, and launch it. The app starts JARVIS locally,
+opens the console window, stores data under `~/Library/Application Support/Jarvis`,
+and still requires Ollama plus at least one local model for AI replies.
+
+The app is not a terminal-only installation: use the **Mac Control → Open macOS
+Permissions** menu item after the first launch. It opens the macOS permission
+panels and gives the exact app executable path to add for Accessibility,
+Automation, Calendar, Contacts, Full Disk Access, Screen Recording, and Input
+Monitoring. Browser microphone access is requested in the app window.
+
+#### macOS says the app is damaged
+
+Open the DMG, right-click **Jarvis.app**, choose **Open**, then choose **Open**
+again in the confirmation dialog. If macOS sends the app to Trash, remove it,
+download the latest v4.0.6 DMG again, and run:
+
 ```bash
-git clone https://github.com/Gityus13/jarvis.git
-cd jarvis
+xattr -cr "/Applications/Jarvis.app"
+open "/Applications/Jarvis.app"
+```
+
+This is an unsigned ad-hoc build, not a notarized Apple Developer ID build.
+The DMG can be used locally, but Apple may require the confirmation steps above.
+
+Jarvis starts microphone access automatically in the desktop app. You can say
+"Hey Jarvis" or hold `SPACE` / the microphone button to speak. If macOS blocks
+the microphone, use **Mac Control → Enable Microphone** or click the MIC status
+chip, allow the microphone for Jarvis, and listening will retry.
+
+Voice input in Jarvis.app uses Apple's native on-device Speech framework, not
+Chromium/Google speech recognition. macOS must support on-device recognition
+and Jarvis must have Microphone and Speech Recognition permission.
+
+**DMG build and release**
+
+Every `v*` tag builds the macOS DMG on GitHub Actions and attaches it to that
+release:
+
+```bash
+git tag v4.0.2
+git push origin v4.0.2
+```
+
+Local DMG build:
+
+```bash
+npm install
+npm run dist:mac
+```
+
+```bash
+git clone https://github.com/Gityus13/jarviis.git
+cd jarviis
 ./setup.sh          # installs, creates .env, checks Ollama, offers to download a model
 npm start
 ```

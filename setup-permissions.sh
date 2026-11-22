@@ -1,9 +1,8 @@
 #!/bin/bash
 # J.A.R.V.I.S. — macOS Permissions Setup (FIXED)
 # ─────────────────────────────────────────────────────────────────────────────
-# THE KEY FIX: macOS grants permissions to the BINARY, not the terminal app.
-# Since JARVIS runs via `node`, you must add your NODE BINARY to each panel —
-# not just "Terminal". This script finds node for you and shows the exact path.
+# THE KEY FIX: macOS grants permissions to the app binary, not Terminal.
+# Packaged Jarvis permissions belong to Jarvis.app / its executable.
 # ─────────────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -12,8 +11,13 @@ echo "║     J.A.R.V.I.S. — macOS Permissions Setup (v2 FIXED)       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-# ── Find node binary ──────────────────────────────────────────────────────────
-NODE_PATH=$(which node 2>/dev/null)
+# ── Find Jarvis executable ───────────────────────────────────────────────────
+# In the packaged desktop app, permissions belong to the app/helper binary.
+if [ -n "${JARVIS_EXECUTABLE_PATH:-}" ]; then
+  NODE_PATH="$JARVIS_EXECUTABLE_PATH"
+elif command -v node >/dev/null 2>&1; then
+  NODE_PATH=$(which node)
+fi
 if [ -z "$NODE_PATH" ]; then
   # Try common locations (nvm, Homebrew, Volta, system)
   for p in \
@@ -26,28 +30,28 @@ if [ -z "$NODE_PATH" ]; then
 fi
 
 if [ -z "$NODE_PATH" ]; then
-  echo "❌  Could not find node binary. Install Node.js first: https://nodejs.org"
+  echo "❌  Could not find Jarvis executable or Node.js binary."
   exit 1
 fi
 
 # Resolve symlinks (important — macOS needs the REAL path for permissions)
 NODE_REAL=$(readlink -f "$NODE_PATH" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$NODE_PATH'))" 2>/dev/null || echo "$NODE_PATH")
 
-echo "✅  Found node at: $NODE_PATH"
+echo "✅  Found executable at: $NODE_PATH"
 echo "    Real path:     $NODE_REAL"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  HOW TO ADD node TO EACH PERMISSION PANEL:"
+echo "  HOW TO ADD Jarvis TO EACH PERMISSION PANEL:"
 echo ""
-echo "  1. When the panel opens, look for 'node' in the list"
+echo "  1. When the panel opens, look for 'Jarvis' in the list"
 echo "  2. If NOT listed: click the [+] button"
 echo "  3. In the file picker, press Cmd+Shift+G (Go to folder)"
 echo "  4. Paste this path and click Open:"
 echo ""
 echo "     $NODE_REAL"
 echo ""
-echo "  5. Find node in the list → toggle the switch ON"
+echo "  5. Find Jarvis in the list → toggle the switch ON"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -76,11 +80,11 @@ open_panel() {
 # ── 1. Accessibility — REQUIRED for robotjs keyboard/mouse ───────────────────
 open_panel "1/7" "Accessibility  (keyboard & mouse control)" \
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" \
-  "→ Add node binary, toggle ON. Required for all keyboard/mouse commands."
+  "→ Add Jarvis.app or the Jarvis executable, toggle ON. Required for keyboard/mouse control."
 
 # ── 2. Automation — REQUIRED for AppleScript (Calendar, Messages, Finder) ────
 echo "▶  Step 2/7 — Automation  (Calendar, Messages, Finder, System Events)"
-echo "   After adding node, you'll see sub-checkboxes:"
+echo "   After adding Jarvis, you'll see sub-checkboxes:"
 echo "   Toggle ON: Finder ✓  Calendar ✓  System Events ✓  Messages ✓"
 echo "   Opening panel in 2 seconds..."
 sleep 2
@@ -92,7 +96,7 @@ echo ""
 # ── 3. Calendars ─────────────────────────────────────────────────────────────
 open_panel "3/7" "Calendars  (read & add events)" \
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars" \
-  "→ Add node binary, toggle ON. This is what makes 'What's on my calendar' work."
+  "→ Add Jarvis.app or the Jarvis executable, toggle ON."
 
 # ── 4. Contacts ──────────────────────────────────────────────────────────────
 open_panel "4/7" "Contacts  (send iMessages by name)" \
@@ -101,7 +105,7 @@ open_panel "4/7" "Contacts  (send iMessages by name)" \
 # ── 5. Full Disk Access ───────────────────────────────────────────────────────
 open_panel "5/7" "Full Disk Access  (read/write files anywhere)" \
   "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" \
-  "→ Click [+], navigate to node binary, add it."
+  "→ Click [+], navigate to Jarvis.app, add it."
 
 # ── 6. Screen Recording ───────────────────────────────────────────────────────
 open_panel "6/7" "Screen Recording  (screenshots)" \
@@ -118,7 +122,7 @@ echo "╔═══════════════════════�
 echo "║     All permissions configured!                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "  Node binary that needs permissions:"
+echo "  Jarvis executable that needs permissions:"
 echo "  $NODE_REAL"
 echo ""
 echo "  Quick test commands (paste in Terminal):"
@@ -129,11 +133,10 @@ echo ""
 echo "  # Test Accessibility (robotjs):"
 echo "  osascript -e 'tell application \"System Events\" to key code 0'"
 echo ""
-echo "  # Start JARVIS:"
-echo "  npm start"
-echo "  # Open Chrome → http://localhost:3000"
+echo "  # Start Jarvis:"
+echo "  open -a Jarvis"
 echo ""
-echo "  ⚠  After granting permissions, RESTART the server (npm start)"
+echo "  ⚠  After granting permissions, restart Jarvis.app"
 echo "     macOS permission grants only take effect on next launch."
 echo ""
 echo "  💡 If Calendar still fails:"

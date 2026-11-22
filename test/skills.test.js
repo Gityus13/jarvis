@@ -27,9 +27,10 @@ const ROUTES = [
   ["find file resume.pdf", "files"], ["generate a password", "password"], ["flip a coin", "random"], ["roll a dice", "random"], ["roll a d20", "random"],
   ["what's the date", "date"], ["good morning", "briefing"], ["daily briefing", "briefing"], ["summarize my clipboard", "clipai"], ["help", "help"],
   ["set my city to Baku", "setcity"],
+  ["how are you", "conversation"], ["hello", "conversation"], ["who are you", "conversation"], ["thank you", "conversation"],
   // these must NOT be skills — they belong to the Mac router or the AI
-  ["tell me a joke", null], ["how are you", null], ["write a python function", null], ["what is love", null],
-  ["open spotify", null], ["what is the capital of france", null], ["explain quantum computing", null], ["who are you", null],
+  ["tell me a joke", null], ["write a python function", null], ["what is love", null],
+  ["open spotify", null], ["what is the capital of france", null], ["explain quantum computing", null],
 ];
 for (const [phrase, want] of ROUTES) {
   test(`routes "${phrase}" → ${want}`, () => {
@@ -40,6 +41,12 @@ for (const [phrase, want] of ROUTES) {
 
 // ── offline skills actually work ───────────────────────────────────────────────
 const say = async (t) => (await skills.handle(t, { ai: async () => "AI" })) || {};
+
+test("conversation replies are deterministic and offline", async () => {
+  assert.equal((await say("how are you")).say, "I am operational and ready.");
+  assert.equal((await say("hello")).say, "Hello.");
+  assert.equal((await say("who are you")).say, "I am Jarvis, your local tactical assistant.");
+});
 
 test("calculator", async () => {
   assert.match((await say("what is 25 times 4")).say, /100/);

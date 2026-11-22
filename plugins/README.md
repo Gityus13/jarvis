@@ -1,6 +1,9 @@
 # Plugins
 
-Drop a `.js` file in this folder and restart JARVIS — it is loaded automatically.
+In development, drop a `.js` file in this folder and restart JARVIS. In a packaged
+Jarvis app, drop a `.js` file in
+`~/Library/Application Support/Jarvis/plugins/` (the `Jarvis` folder may be
+named by macOS packaging) and restart Jarvis.
 
 ```js
 // plugins/coffee.js

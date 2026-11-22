@@ -73,7 +73,25 @@ function homePath(fp) {
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
 // ─── Main router ───────────────────────────────────────────────────────────────
+function normalizeMacAction(action) {
+  if (!action || !action.action) return action;
+  if (action.action === "system" && action.command) {
+    const aliases = {
+      get_clipboard: "get_clipboard",
+      set_clipboard: "set_clipboard",
+      get_battery: "get_battery",
+      get_wifi: "get_wifi",
+      clipboard: "get_clipboard",
+    };
+    if (aliases[action.command]) {
+      return { action: aliases[action.command], text: action.text };
+    }
+  }
+  return action;
+}
+
 async function executeMacCommand(action) {
+  action = normalizeMacAction(action);
   if (!action || !action.action) return null;
   switch (action.action) {
     case "open_app":          return openApp(action.app);
@@ -223,7 +241,7 @@ async function screenshot() {
   } else {
     await run("sh", ["-c", `import -window root "$JARVIS_ARG" 2>/dev/null || scrot "$JARVIS_ARG"`], { env: { JARVIS_ARG: fp } });
   }
-  if (!fs.existsSync(fp)) throw new Error("Screenshot failed — on macOS allow Screen Recording for node in System Settings → Privacy");
+  if (!fs.existsSync(fp)) throw new Error("Screenshot failed — on macOS allow Screen Recording for Jarvis.app in System Settings → Privacy & Security");
   return `Screenshot saved to Desktop: ${name}`;
 }
 
@@ -299,7 +317,7 @@ function getScreenSize() {
 }
 
 function needRobot() {
-  if (!robot) throw new Error("robotjs not installed — run: npm install, then grant Accessibility to node");
+  if (!robot) throw new Error("Robot control unavailable — grant Accessibility to Jarvis.app in System Settings");
 }
 
 function moveMouse(x, y) {
@@ -495,8 +513,7 @@ async function openFile(fp) {
 }
 
 // ─── Calendar ──────────────────────────────────────────────────────────────────
-// macOS gives the Calendar/Automation permission to the BINARY running osascript (node):
-// add your node binary in System Settings → Privacy → Calendars AND Automation → node → Calendar.
+// macOS grants Calendar/Automation permission to the app binary.
 function calendarDenied(e) {
   const msg = (e.stderr || e.message || "").toLowerCase();
   return msg.includes("not allowed") || msg.includes("authorization") || msg.includes("1743") || msg.includes("not authorised");
@@ -533,7 +550,7 @@ async function getCalendar() {
     return (await as(script, 25000)) || "No events today";
   } catch (e) {
     if (calendarDenied(e)) {
-      return "Calendar access denied. Fix: System Settings → Privacy → Calendars → add your node binary (run: which node). Also Automation → node → Calendar → ON.";
+      return "Calendar access denied. Fix: System Settings → Privacy & Security → Calendars/Automation → add Jarvis.app, then restart Jarvis.";
     }
     throw e;
   }
@@ -609,7 +626,7 @@ async function addCalendar(title, date, time) {
     await as(script, 25000);
     return `Added "${title}" to your calendar for ${when.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
   } catch (e) {
-    if (calendarDenied(e)) return "Calendar access denied — grant your node binary access in System Settings → Privacy → Calendars";
+    if (calendarDenied(e)) return "Calendar access denied — grant Jarvis.app access in System Settings → Privacy & Security → Calendars";
     throw new Error(`Couldn't add the event: ${(e.message || "").split("\n")[0].slice(0, 120)}`);
   }
 }
@@ -639,7 +656,7 @@ async function sendMessage(to, msg) {
     ].join("\n"));
     return `iMessage sent to ${to}`;
   } catch (e) {
-    if (calendarDenied(e)) return "Messages access denied. Run: bash setup-permissions.sh — grant Automation → node → Messages.";
+    if (calendarDenied(e)) return "Messages access denied — grant Jarvis.app Automation → Messages in System Settings.";
     // Fallback: open Messages pre-filled (needs a phone number or email)
     try { await run("open", [`imessage://${encodeURIComponent(to)}?body=${encodeURIComponent(msg)}`]); }
     catch { await run("open", ["-a", "Messages"]); }
@@ -671,7 +688,7 @@ async function windowFullscreen(app) {
   return `${app ? resolveApp(app) : "Window"} fullscreen toggled`;
 }
 
-/** macOS: does the app running node have Accessibility permission (needed for keystrokes/mouse)? */
+/** macOS: does the Jarvis app binary have Accessibility permission? */
 async function checkAccessibility() {
   if (!IS_MAC) return null;
   try { return (await as(`tell application "System Events" to return UI elements enabled`, 6000)) === "true"; }
@@ -680,6 +697,7 @@ async function checkAccessibility() {
 
 module.exports = {
   executeMacCommand, getScreenSize,
+  normalizeMacAction,
   as, run, setClipboard, readClipboard, checkAccessibility, hasRobot: () => !!robot,
   _internal: { parseCombo, parseWhen, asq, homePath, normUrl, cleanAppName },
 };
